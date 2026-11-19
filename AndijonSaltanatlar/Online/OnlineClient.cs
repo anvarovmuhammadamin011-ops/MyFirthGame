@@ -272,6 +272,20 @@ namespace AndijonSaltanatlar.Online
                     QueueRefresh();
                 });
                 _hub.On<int, int>("AllianceProjectUpdated", (_, __) => QueueRefresh());
+                // Dunyo umumiy chati
+                _hub.On<ChatMessageDto>("ChatMessage", m => Post(() =>
+                {
+                    if (m == null) return;
+                    ChatLog.Add(m);
+                    if (ChatLog.Count > 60) ChatLog.RemoveRange(0, ChatLog.Count - 60);
+                    ChatSerial++;
+                    if (!ChatOpen) UnreadChat++;
+                }));
+                _hub.On<ChatMessageDto[]>("ChatHistory", list => Post(() =>
+                {
+                    ChatLog = new List<ChatMessageDto>(list ?? Array.Empty<ChatMessageDto>());
+                    ChatSerial++;
+                }));
                 // PROMPT 25: urush hodisalari — faqat o'zimizga tegishlilari ko'rsatiladi, holat serverdan qayta o'qiladi.
                 _hub.On<int, int, int, string>("BattleInvitationCreated", (_, from, to, fromName) =>
                 {
@@ -600,6 +614,95 @@ namespace AndijonSaltanatlar.Online
         public void ProposeAgreement(int type, int toKingdomId, int regionId, int price) => Command("api/diplomacy/agreement/propose", id => new ProposeAgreementRequest { CommandId = id, Type = type, ToKingdomId = toKingdomId, RegionId = regionId, Price = price });
         public void RespondAgreement(int agreementId, bool accept) => Command("api/diplomacy/agreement/respond", id => new RespondAgreementRequest { CommandId = id, AgreementId = agreementId, Accept = accept });
         public void CreateAllianceOffer(string product, int quantity, int totalPrice, int allianceId) => Command("api/online/market/offers", id => new CreateOfferRequest { CommandId = id, Product = product, Quantity = quantity, TotalPrice = totalPrice, AllianceId = allianceId });
+
+        // ---- Promt 6: boshqa o'yinchi shahriga mehmon, sovg'a va xat ----
+        /// <summary>Hozir ko'rilayotgan boshqa saltanatning ochiq ko'rinishi (snapshot). null — hali yuklanmagan.</summary>
+        public CitySnapshotDto Visit { get; private set; }
+        public bool VisitBusy { get; private set; }
+        /// <summary>Kelgan xatlar qutisi (o'qilmaganlar soni bilan).</summary>
+        public LettersResponse Inbox { get; private set; }
+        public int UnreadLetters => Inbox?.Unread ?? 0;
+
+        /// <summary>Boshqa o'yinchi shahrining ochiq ko'rinishini oladi (maxfiy ma'lumotsiz).</summary>
+        public void VisitCity(int kingdomId)
+        {
+            if (_http == null) return;
+            VisitBusy = true; Visit = null;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    CitySnapshotDto dto = await _http.GetFromJsonAsync<CitySnapshotDto>("api/online/city/" + kingdomId, Json);
+                    Post(() => Visit = dto);
+                }
+                catch (Exception ex) { SetMessage("Shaharni ochib bo'lmadi: " + Short(ex.Message), true); }
+                finally { Post(() => VisitBusy = false); }
+            });
+        }
+
+        public void CloseVisit() => Visit = null;
+
+        /// <summary>Boshqa saltanatga sovg'a (coin|food) yuboradi. Server kunlik limit va miqdorni tekshiradi.</summary>
+        public void SendGift(int toKingdomId, string kind, int amount)
+        {
+            if (!LoggedIn) { SetMessage("Avval serverga kiring", true); return; }
+            Run(async () =>
+            {
+                HttpResponseMessage resp = await _http.PostAsJsonAsync("api/online/gift",
+                    new GiftRequest { CommandId = Guid.NewGuid().ToString("N"), ToKingdomId = toKingdomId, Kind = kind, Amount = amount }, Json);
+                if (!resp.IsSuccessStatusCode) { SetMessage(await ErrorText(resp, "Sovg'a yuborilmadi"), true); return; }
+                SetMessage("Sovg'a yuborildi", false);
+                QueueRefresh();
+            });
+        }
+
+        /// <summary>Boshqa saltanatga xat yuboradi. Server uzunlik, filtr va spam limitini tekshiradi.</summary>
+        public void SendLetter(int toKingdomId, string text)
+        {
+            if (!LoggedIn) { SetMessage("Avval serverga kiring", true); return; }
+            Run(async () =>
+            {
+                HttpResponseMessage resp = await _http.PostAsJsonAsync("api/online/letter",
+                    new LetterRequest { CommandId = Guid.NewGuid().ToString("N"), ToKingdomId = toKingdomId, Text = text ?? "" }, Json);
+                if (!resp.IsSuccessStatusCode) { SetMessage(await ErrorText(resp, "Xat yuborilmadi"), true); return; }
+                SetMessage("Xat yuborildi", false);
+            });
+        }
+
+        /// <summary>Kelgan xatlar qutisini (fonda) yuklaydi.</summary>
+        public void LoadLetters()
+        {
+            if (_http == null) return;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    LettersResponse dto = await _http.GetFromJsonAsync<LettersResponse>("api/online/letters", Json);
+                    Post(() => { if (dto != null) Inbox = dto; });
+                }
+                catch { }
+            });
+        }
+
+        // ---- Dunyo umumiy chati (real vaqt, SignalR) ----
+        /// <summary>Oxirgi chat xabarlari (eng yangisi oxirida).</summary>
+        public List<ChatMessageDto> ChatLog { get; private set; } = new List<ChatMessageDto>();
+        /// <summary>Har yangi chat xabarida oshadi (UI avtomatik pastga siljishi uchun).</summary>
+        public int ChatSerial { get; private set; }
+        /// <summary>Chat oynasi yopiq bo'lganda kelgan o'qilmagan xabarlar soni.</summary>
+        public int UnreadChat { get; private set; }
+        /// <summary>Chat oynasi ochiqligi — ochiq bo'lsa yangi xabarlar o'qilmagan deb sanalmaydi.</summary>
+        public bool ChatOpen { get; set; }
+        public void MarkChatRead() => UnreadChat = 0;
+
+        /// <summary>Dunyo umumiy chatiga xabar yuboradi (server uzunlik va filtrni tekshiradi).</summary>
+        public void SendChat(string text)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length == 0 || _hub == null || State == null) return;
+            int worldId = State.WorldId;
+            Task.Run(async () => { try { await _hub.InvokeAsync("SendChat", worldId, text); } catch { } });
+        }
 
         public void Dispose()
         {

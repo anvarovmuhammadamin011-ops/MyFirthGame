@@ -326,7 +326,7 @@ namespace AndijonSaltanatlar.UI.Design
         // UITextInput
         // ------------------------------------------------------------------
         /// <summary>Matn maydoni. Bosilganda fokus oladi; fokusda klaviatura belgilarini qabul qiladi.</summary>
-        public string TextInput(Rectangle r, string id, string value, string placeholder, bool password = false, Action onFocus = null)
+        public string TextInput(Rectangle r, string id, string value, string placeholder, bool password = false, Action onFocus = null, int maxLen = 64)
         {
             bool focus = FocusId == id;
             bool hover = Hover(r) && !_touch;
@@ -336,7 +336,7 @@ namespace AndijonSaltanatlar.UI.Design
                 while (_input.TryReadChar(out char c))
                 {
                     if (c == '\b') { if (value.Length > 0) value = value.Substring(0, value.Length - 1); }
-                    else if (!char.IsControl(c) && value.Length < 64) value += c;
+                    else if (!char.IsControl(c) && value.Length < maxLen) value += c;
                 }
             string shown = string.IsNullOrEmpty(value) ? placeholder : (password ? new string('*', value.Length) : value);
             Color col = string.IsNullOrEmpty(value) ? T.TextSecondary : T.TextPrimary;

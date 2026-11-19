@@ -132,6 +132,14 @@ namespace AndijonSaltanatlar.Shared.DTOs
         public int Unread { get; set; }
     }
 
+    /// <summary>Dunyo umumiy chati xabari (real vaqtda SignalR orqali).</summary>
+    public sealed class ChatMessageDto
+    {
+        public string Name { get; set; } = "";
+        public string Text { get; set; } = "";
+        public System.DateTime SentAt { get; set; }
+    }
+
     public sealed class RiceFieldDto
     {
         public int Id { get; set; }

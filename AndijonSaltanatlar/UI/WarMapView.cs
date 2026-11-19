@@ -99,9 +99,12 @@ namespace AndijonSaltanatlar.UI
                 ui.Type.DrawFitted(_sbOf(), lbl, lr, TextStyle.Caption, m.TargetIsMine ? new Color(250, 236, 210) : Ink, 1);
             }
 
-            // Bosish: eng yaqin qasr
-            int picked = cv.PickNearest(w.MapRegions.Select(r => (r.RegionId, cv.ToScreen(r.MapX, r.MapY) + new Vector2(0, -12 * s))), 34 * s + 14);
-            if (picked >= 0) _mapRegion = picked;
+            // Bosish: eng yaqin qasr (diplomatiya oynasi ochiq bo'lsa — xaritaga bosish o'tmaydi)
+            if (_dipMode == 0)
+            {
+                int picked = cv.PickNearest(w.MapRegions.Select(r => (r.RegionId, cv.ToScreen(r.MapX, r.MapY) + new Vector2(0, -12 * s))), 34 * s + 14);
+                if (picked >= 0) _mapRegion = picked;
+            }
 
             cv.DrawOverlay("O'zbekiston");
             DrawMapInfo(info, w);
@@ -219,6 +222,9 @@ namespace AndijonSaltanatlar.UI
             if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · ta'minot " + WarRules.MarchCost + " tanga", T.TextSecondary);
             if (r.OutcomeUz.Length > 0) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
             if (r.IsMine || r.OwnerKingdomId == 0) { if (r.BlockReasonUz.Length > 0) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.TextSecondary, 2); return; }
+
+            // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat
+            y = DrawDiplomacyRow(x, y, iw, r);
 
             // Qo'shin tanlash
             var ready = w.Armies.Where(a => a.Status == ArmyStatus.Available && a.UnitCount >= WarRules.MinBattleArmy).ToList();

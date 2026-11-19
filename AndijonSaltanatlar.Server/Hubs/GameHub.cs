@@ -6,6 +6,8 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using AndijonSaltanatlar.Shared.DTOs;
+using AndijonSaltanatlar.Server.Services;
 
 namespace AndijonSaltanatlar.Server.Hubs
 {
@@ -24,6 +26,11 @@ namespace AndijonSaltanatlar.Server.Hubs
     {
         private static readonly ConcurrentDictionary<string, (int world, string name)> Connections = new();
 
+        // Dunyo umumiy chati — oxirgi xabarlar (xotirada, dunyo bo'yicha). Server qayta ishga tushsa tarix tozalanadi.
+        private const int ChatHistoryMax = 50;
+        private const int ChatMaxLength = 200;
+        private static readonly ConcurrentDictionary<int, List<ChatMessageDto>> Chat = new();
+
         public static string WorldGroup(int worldId) => "world-" + worldId;
 
         public static List<string> OnlinePlayers(int worldId)
@@ -35,6 +42,32 @@ namespace AndijonSaltanatlar.Server.Hubs
             Connections[Context.ConnectionId] = (worldId, name);
             await Groups.AddToGroupAsync(Context.ConnectionId, WorldGroup(worldId));
             await Clients.Group(WorldGroup(worldId)).SendAsync("PlayersChanged", worldId);
+            // Qo'shilgan o'yinchiga oxirgi chat xabarlarini yuboramiz
+            List<ChatMessageDto> history = Chat.TryGetValue(worldId, out List<ChatMessageDto> h) ? h : null;
+            if (history != null)
+            {
+                ChatMessageDto[] snapshot;
+                lock (history) snapshot = history.ToArray();
+                await Clients.Caller.SendAsync("ChatHistory", snapshot);
+            }
+        }
+
+        /// <summary>Dunyo umumiy chatiga xabar yuborish (uzunlik va nomaqbul so'z filtri bilan).</summary>
+        public async Task SendChat(int worldId, string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            text = text.Trim();
+            if (text.Length > ChatMaxLength) text = text.Substring(0, ChatMaxLength);
+            if (ProfanityFilter.Contains(text)) return; // nomaqbul so'z — yuborilmaydi
+            string name = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "?";
+            var msg = new ChatMessageDto { Name = name, Text = text, SentAt = DateTime.UtcNow };
+            List<ChatMessageDto> history = Chat.GetOrAdd(worldId, _ => new List<ChatMessageDto>());
+            lock (history)
+            {
+                history.Add(msg);
+                if (history.Count > ChatHistoryMax) history.RemoveRange(0, history.Count - ChatHistoryMax);
+            }
+            await Clients.Group(WorldGroup(worldId)).SendAsync("ChatMessage", msg);
         }
 
         public async Task LeaveWorld(int worldId)

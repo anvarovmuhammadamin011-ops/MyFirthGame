@@ -96,7 +96,7 @@ namespace AndijonSaltanatlar.UI
             if (_client.LoggedIn) _client.QueueRefresh();
         }
 
-        public void Close() { IsOpen = false; FullMap = false; _ui.FocusId = null; _confirm = null; }
+        public void Close() { IsOpen = false; FullMap = false; _ui.FocusId = null; _confirm = null; _dipMode = 0; _chatOpen = false; _client.ChatOpen = false; }
 
         /// <summary>To'liq ekranli dunyo xaritasi (M): menyu va sarlavhasiz, butun ekran — xarita.</summary>
         public bool FullMap { get; private set; }
@@ -108,7 +108,7 @@ namespace AndijonSaltanatlar.UI
             ShowTab("warmap");
             FullMap = true;
             _warRequested = false;
-            if (_client.LoggedIn) _client.LoadWar();
+            if (_client.LoggedIn) { _client.LoadWar(); _client.LoadLetters(); }
             Open();
         }
         public void Toggle() { if (IsOpen) Close(); else Open(); }
@@ -183,6 +183,8 @@ namespace AndijonSaltanatlar.UI
             {
                 if (_pendingKeyboardField == "server") _server = kb; else if (_pendingKeyboardField == "user") _user = kb; else if (_pendingKeyboardField == "pass") _pass = kb;
                 else if (_pendingKeyboardField == "kname") _nameDraft = kb;
+                else if (_pendingKeyboardField == "letter") _letterDraft = kb;
+                else if (_pendingKeyboardField == "chat") _chatDraft = kb;
                 _pendingKeyboard = null; _pendingKeyboardField = null;
             }
 
@@ -203,6 +205,8 @@ namespace AndijonSaltanatlar.UI
             {
                 if (_confirm != null) _confirm = null;
                 else if (_ui.FocusId != null) _ui.FocusId = null;
+                else if (_chatOpen) CloseChat();
+                else if (_dipMode != 0) { _dipMode = 0; _client.CloseVisit(); }
                 else if (_client.State?.NeedsHome == true) { if (_startStep == 1) _startStep = 0; }
                 else Close();
             }
@@ -274,6 +278,8 @@ namespace AndijonSaltanatlar.UI
             if (FullMap && _client.LoggedIn && _client.State != null && !_client.State.NeedsHome)
             {
                 DrawFullMap(vw, vh);
+                DrawDiplomacyOverlay(vw, vh);
+                DrawChatOverlay(vw, vh);
                 ui.Toast(_toast, _toastError, Math.Min(1f, _toastTimer));
                 ui.End();
                 return;
@@ -286,6 +292,8 @@ namespace AndijonSaltanatlar.UI
             else DrawApp(win);
 
             if (_confirm != null) DrawConfirm();
+            DrawDiplomacyOverlay(vw, vh);
+            DrawChatOverlay(vw, vh);
             ui.Toast(_toast, _toastError, Math.Min(1f, _toastTimer));
             ui.End();
         }
@@ -305,7 +313,17 @@ namespace AndijonSaltanatlar.UI
             int headH = (int)ui.Type.LineHeight(TextStyle.ScreenTitle) + 14;
             ui.Text("DUNYO XARITASI", new Vector2(pad, pad), TextStyle.ScreenTitle, T.Accent);
             string hint = "Qasrni bosing — egasi  ·  M — yopish";
-            ui.TextFit(hint, new Rectangle(pad + 330, pad + 6, vw - 2 * pad - 330 - h - 20, (int)ui.Type.LineHeight(TextStyle.Secondary)), TextStyle.Secondary, T.TextSecondary);
+            // Xatlar qutisi va chat tugmalari (o'qilmaganlar soni bilan)
+            int unread = _client.UnreadLetters;
+            int inboxW = (int)ui.Type.Measure("Xatlar (00)", TextStyle.Button).X + 28;
+            var inboxBtn = new Rectangle(vw - pad - h - 8 - inboxW, pad, inboxW, h);
+            if (ui.Button(inboxBtn, "Xatlar" + (unread > 0 ? " (" + unread + ")" : ""), unread > 0 ? ButtonKind.Accent : ButtonKind.Secondary))
+            { _dipMode = 4; _client.LoadLetters(); }
+            int uc = _client.UnreadChat;
+            int chatW = (int)ui.Type.Measure("Chat (00)", TextStyle.Button).X + 28;
+            var chatBtn = new Rectangle(inboxBtn.X - 8 - chatW, pad, chatW, h);
+            if (ui.Button(chatBtn, "Chat" + (uc > 0 ? " (" + uc + ")" : ""), uc > 0 ? ButtonKind.Accent : ButtonKind.Secondary)) OpenChat();
+            ui.TextFit(hint, new Rectangle(pad + 330, pad + 6, chatBtn.X - (pad + 330) - 12, (int)ui.Type.LineHeight(TextStyle.Secondary)), TextStyle.Secondary, T.TextSecondary);
             if (ui.IconButton(new Rectangle(vw - pad - h, pad, h, h), "×", "Yopish (M)")) { Close(); return; }
             var body = new Rectangle(pad, pad + headH, vw - 2 * pad, vh - 2 * pad - headH);
             WarOverviewDto w = _client.War;
