@@ -1018,9 +1018,12 @@ namespace AndijonSaltanatlar.Server.Services
                 if (home == null) return "Avval o'z hududingiz bo'lishi kerak";
                 seconds = WarRules.MarchSeconds(home.Latitude, home.Longitude, region.Latitude, region.Longitude);
                 bool wasActive = conflict != null && conflict.Active;
-                int cost = WarRules.MarchCost + (owner.IsAi && !wasActive ? WarRules.ConflictCost : 0);
-                int paid = await Db.KingdomResources.Where(r => r.KingdomId == me.Id && r.Coin >= cost).ExecuteUpdateAsync(s => s.SetProperty(r => r.Coin, r => r.Coin - cost));
-                if (paid == 0) return "Yurish ta'minoti uchun tanga yetarli emas (" + cost + ")";
+                int cost = 0; // Yurish tekin (o'yinchi talabi) — ta'minot/konflikt uchun tanga olinmaydi
+                if (cost > 0)
+                {
+                    int paid = await Db.KingdomResources.Where(r => r.KingdomId == me.Id && r.Coin >= cost).ExecuteUpdateAsync(s => s.SetProperty(r => r.Coin, r => r.Coin - cost));
+                    if (paid == 0) return "Yurish ta'minoti uchun tanga yetarli emas (" + cost + ")";
+                }
                 if (owner.IsAi && !wasActive)
                 {
                     await SetConflictAsync(me.WorldId, me.Id, owner.Id, active: true, truceUntil: null);

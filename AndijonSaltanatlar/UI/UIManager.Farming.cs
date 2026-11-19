@@ -131,6 +131,8 @@ namespace AndijonSaltanatlar.UI
             FarmRequest r = _state.Farming.Active;
             if (r == null) return;
             Fill(sb, new Rectangle(0, 0, vw, vh), new Color(0, 0, 0, 140));
+            // Gapirayotgan fermer — pastda yarim tanasi ko'rinib, boshini tebratib "gapiradi"
+            DrawSpeaker(sb, vw, vh, _assets.TryGet(SpriteKeys.UnitCitizen + "3_0"), "FERMER");
             Panel(sb, _farmModal, PanelBg, Gold, 2);
             int x = _farmModal.X + 20, y = _farmModal.Y + 16;
             Texture2D icon = _assets.TryGet(SpriteKeys.UnitCitizen + "3_0");
@@ -147,6 +149,32 @@ namespace AndijonSaltanatlar.UI
             DrawButtonText(sb, "KEYINROQ", _modalLaterBtn, Cream);
             Panel(sb, _modalStoreBtn, PanelBg2, Border, 1);
             DrawButtonText(sb, "OMBORNI KO'RISH", _modalStoreBtn, Cream);
+        }
+
+        /// <summary>Ekranning pastki chap burchagida gapirayotgan NPC portreti: yarim tanasi ko'rinadi,
+        /// boshi tebranadi va og'iz oldida pulslanuvchi nuqtalar bilan "gapirayotgani" bildiriladi (ovoz tizimi yo'q).</summary>
+        private void DrawSpeaker(SpriteBatch sb, int vw, int vh, Texture2D icon, string name)
+        {
+            if (icon == null) return;
+            float t = System.Environment.TickCount / 1000f;
+            int maxW = Math.Max(70, _farmModal.X - 24);
+            int ph = (int)(vh * 0.66f);
+            int pw = ph * icon.Width / Math.Max(1, icon.Height);
+            if (pw > maxW) { pw = maxW; ph = pw * icon.Height / Math.Max(1, icon.Width); }
+            int bob = (int)(MathF.Sin(t * 3.0f) * 3f);
+            int px = 16;
+            int py = vh - (int)(ph * 0.55f) + bob; // tananing yarmi ekran pastidan tashqarida
+            Fill(sb, new Rectangle(px - 6, py + 6, pw + 12, vh - py), new Color(18, 14, 8, 120));
+            DrawFit(sb, icon, new Rectangle(px, py, pw, ph));
+            // gapirish belgisi (og'iz oldida pulslanuvchi nuqtalar)
+            int talk = (int)(t * 5) % 3 + 1;
+            int my = py + (int)(ph * 0.16f), mx = px + pw - 12;
+            for (int i = 0; i < talk; i++) Fill(sb, new Rectangle(mx + i * 6, my - i * 2, 4, 4), new Color(255, 236, 170));
+            // ism lavhasi
+            Vector2 nm = _font.Measure(name, 2);
+            var nr = new Rectangle(px + pw / 2 - (int)nm.X / 2 - 8, py - 4, (int)nm.X + 16, 22);
+            Fill(sb, nr, new Color(44, 32, 16, 235));
+            _font.DrawCentered(sb, name, nr.Center.ToVector2(), Gold, 2);
         }
     }
 }

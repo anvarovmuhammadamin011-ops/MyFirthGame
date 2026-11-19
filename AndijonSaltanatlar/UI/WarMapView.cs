@@ -219,7 +219,7 @@ namespace AndijonSaltanatlar.UI
             Row("Egasi: " + r.OwnerName + (r.OwnerIsAi || r.IsMine || r.OwnerKingdomId == 0 ? "" : " (real o'yinchi)"));
             Row("Shahar: " + r.CityName + " · aholi " + r.Population);
             if (!r.IsMine && r.OwnerKingdomId != 0) Row("Himoya ≈ " + r.DefenseEstimate);
-            if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · ta'minot " + WarRules.MarchCost + " tanga", T.TextSecondary);
+            if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · yurish tekin", T.TextSecondary);
             if (r.OutcomeUz.Length > 0) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
             if (r.IsMine || r.OwnerKingdomId == 0) { if (r.BlockReasonUz.Length > 0) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.TextSecondary, 2); return; }
 
