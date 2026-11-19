@@ -39,6 +39,8 @@ namespace AndijonSaltanatlar.UI
         public Stage Mode { get; set; } = Stage.Login;
         /// <summary>Welcome: "O'YINNI DAVOM ETTIRISH" bosildi.</summary>
         public Action ContinueRequested;
+        /// <summary>Login: "SERVERSIZ O'YNASH" — internet/serversiz, o'yin shu qurilmada saqlanadi.</summary>
+        public Action OfflineRequested;
         /// <summary>Profile: taxallus saqlandi.</summary>
         public Action ProfileDone;
         /// <summary>Shoh qiyofasi oldindan ko'rinishi uchun sprite (Game1 beradi).</summary>
@@ -130,7 +132,7 @@ namespace AndijonSaltanatlar.UI
             int titleW = (int)ui.Type.Measure("ANDIJON: TAXTLAR JANGI", TextStyle.MainTitle).X + 72;
             CloudLoginState st = _cloud.State;
             bool extraRow = st == CloudLoginState.Error || st == CloudLoginState.WaitingForBrowser;
-            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ui.Type.LineHeight(TextStyle.Body) + 5 * capH) + (extraRow ? 3 : 2) * h + 8 * gap + 70;
+            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ui.Type.LineHeight(TextStyle.Body) + 5 * capH) + (extraRow ? 4 : 3) * h + 9 * gap + 70;
             Rectangle card = Card(ui, vw, vh, Math.Max(titleW, ui.Compact ? 640 : 580), cardH, appear);
 
             int x = card.X + 28, w = card.Width - 56, y = card.Y + 24;
@@ -175,11 +177,15 @@ namespace AndijonSaltanatlar.UI
             {
                 if (GoogleButton(ui, sb, main, "GOOGLE ORQALI KIRISH")) { ui.FocusId = null; _cloud.StartGoogleLogin(_server); }
                 y += h + gap;
+                // Serversiz: internet va server bo'lmasa ham o'ynash (online imkoniyatlarsiz)
+                if (ui.Button(new Rectangle(x, y, w, h - 6), "SERVERSIZ O'YNASH", ButtonKind.Secondary, true, "Internet va serversiz — o'yin shu qurilmada saqlanadi"))
+                { ui.FocusId = null; OfflineRequested?.Invoke(); }
+                y += h - 6 + gap;
             }
 
             string msg = _cloud.Message;
             if (string.IsNullOrEmpty(msg) && st == CloudLoginState.SignedOut)
-                msg = "Faqat Google hisobi — parol so'ralmaydi. Saltanatingiz serverda saqlanadi.";
+                msg = "Google bilan kirsangiz — saltanat serverda saqlanadi va online o'ynaysiz. Serversiz rejimda o'yin shu qurilmada saqlanadi.";
             if (!string.IsNullOrEmpty(msg))
                 y += (int)ui.Paragraph(msg, new Rectangle(x, y, w, (int)(capH * 3)), TextStyle.Secondary, _cloud.MessageIsError ? T.Danger : T.TextSecondary, 3) + gap;
 

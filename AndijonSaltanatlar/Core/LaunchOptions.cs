@@ -106,6 +106,9 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: qamalda dushman shohi darhol yiqiladi (askarlar tomonga o'tadi).</summary>
 	public bool SiegeShahDown;
 
+	/// <summary>Sinov: kirish oynasida "SERVERSIZ O'YNASH" bosilgandek.</summary>
+	public bool Offline;
+
 	/// <summary>Sinov: shahardan qo'shin chiqib ketishi (nishon nomi).</summary>
 	public string MarchOut;
 
@@ -335,6 +338,10 @@ public sealed class LaunchOptions
 			case "--siege":
 				launchOptions.SiegeRegion = int.Parse(text, CultureInfo.InvariantCulture);
 				i++;
+				break;
+			case "--offline":
+				launchOptions.Offline = true;
+				launchOptions.Login = true;
 				break;
 			case "--march-out":
 				launchOptions.MarchOut = text;

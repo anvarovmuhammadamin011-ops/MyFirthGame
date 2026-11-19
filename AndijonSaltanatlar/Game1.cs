@@ -158,6 +158,9 @@ public sealed class Game1 : Game
 	private bool _autoLoginStarted;
 
 	private float _autosaveTimer;
+	/// <summary>Serversiz rejim: o'yin faqat shu qurilmada saqlanadi (online imkoniyatlar yo'q).</summary>
+	private bool _offlinePlay;
+	private bool _offlineTestPending;
 
 	/// <summary>Avtomatik saqlash oralig'i (soniya). Yer ochilganda darhol saqlanadi.</summary>
 	private const float AutosaveSeconds = 30f;
@@ -281,7 +284,7 @@ public sealed class Game1 : Game
 			_onlinePanel.Close();
 			_worldSelect = null;
 			_fullUpgradeDone = false;
-			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
+			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook, OfflineRequested = StartOfflineGame };
 			_loginMode = true;
 		};
 		_cloud.SaveConflict = OnCloudConflict;
@@ -418,10 +421,11 @@ public sealed class Game1 : Game
 		if (_loginMode)
 		{
 			_cloud.TryResume(DefaultServer());
-			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl.Length > 0 ? _cloud.ServerUrl : DefaultServer()) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
+			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl.Length > 0 ? _cloud.ServerUrl : DefaultServer()) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook, OfflineRequested = StartOfflineGame };
 			if (_opt.AuthStage == "profile") _loginScreen.Mode = GoogleLoginScreen.Stage.Profile;
 			else if (_opt.AuthStage == "welcome") _loginScreen.Mode = GoogleLoginScreen.Stage.Welcome;
 			else if (_opt.AuthStage == "shah") _loginScreen.OpenShahSetup(false, null);
+			if (_opt.Offline) _offlineTestPending = true;
 		}
 		if (_opt.Online)
 		{
@@ -1200,6 +1204,8 @@ public sealed class Game1 : Game
 		{
 			if (CloudSignedIn && !_loginMode && _state != null && _camera != null)
 				_cloud.UploadSaveBlocking(SaveManager.ToJson(BuildSave()));
+			else if (_offlinePlay && !_loginMode && _state != null && _camera != null)
+				SaveManager.Save(SaveManager.DefaultPath, BuildSave());
 		}
 		catch (Exception)
 		{
@@ -1210,6 +1216,32 @@ public sealed class Game1 : Game
 	public void SaveNowInBackground()
 	{
 		if (CloudSignedIn && !_loginMode && _state != null && _camera != null) UploadNow(showMessage: false);
+		else if (_offlinePlay && !_loginMode && _state != null && _camera != null) SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+	}
+
+	/// <summary>SERVERSIZ O'YNASH: qurilmadagi saqlangan o'yin (bo'lmasa yangi saltanat). Online xarita o'rniga M — saltanat xaritasi.</summary>
+	private void StartOfflineGame()
+	{
+		_offlinePlay = true;
+		SaveGameData data = SaveManager.Load(SaveManager.DefaultPath);
+		if (data != null)
+		{
+			ApplySave(data, "Serversiz rejim: saltanat qolgan joyidan davom etmoqda");
+		}
+		else
+		{
+			_pendingStoryMode = true;
+			_pendingStory = null;
+			NewGame(_currentSeed);
+			_camera.Jump(IsoMath.TileToWorld(new Vector2(GameConfig.CityCenter, GameConfig.CityCenter)), StartZoom());
+			_state.ShowMessage("Serversiz rejim: yangi saltanat boshlandi. O'yin shu qurilmada saqlanadi");
+		}
+		_ui.AccountName = "Serversiz";
+		_loginMode = false;
+		_menuMode = false;
+		_frames = 0;
+		_autosaveTimer = 0f;
+		SaveManager.Save(SaveManager.DefaultPath, BuildSave());
 	}
 
 	/// <summary>Google orqali kirildi: serverdagi saltanatni yuklaymiz (yo'q bo'lsa yangi saltanat).</summary>
@@ -1414,7 +1446,7 @@ public sealed class Game1 : Game
 		_worldSelect = null;
 		_fullUpgradeDone = false;
 		NewGame(_currentSeed);
-		_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
+		_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook, OfflineRequested = StartOfflineGame };
 		_loginMode = true;
 	}
 
@@ -1578,6 +1610,7 @@ public sealed class Game1 : Game
 		{
 			if (_worldSelect != null) _worldSelect.Update(_input);
 			else _loginScreen.Update(_input);
+			if (_offlineTestPending) { _offlineTestPending = false; StartOfflineGame(); return; }
 			// Sinov: login manzili faylga yoziladi va Playwright Google sahifasini o'zi to'ldiradi.
 			if (_opt.LoginUrlFile != null && !_autoLoginStarted && _cloud.State == AndijonSaltanatlar.Online.CloudLoginState.SignedOut)
 			{
@@ -2036,6 +2069,17 @@ public sealed class Game1 : Game
 		else
 		{
 			_ui.CloudOk = false;
+			if (_offlinePlay && !_loginMode)
+			{
+				// Serversiz rejim: avtomatik saqlash qurilmaning o'zida
+				_autosaveTimer += num;
+				if (_state.LandChanged || _autosaveTimer >= AutosaveSeconds)
+				{
+					_state.LandChanged = false;
+					_autosaveTimer = 0f;
+					SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+				}
+			}
 		}
 		_frames++;
 		if (_opt.ScreenshotPath != null && _frames >= (_opt.ScreenshotFrames ?? 6))
