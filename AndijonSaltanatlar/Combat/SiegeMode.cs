@@ -378,15 +378,23 @@ namespace AndijonSaltanatlar.Combat
             return n > 0;
         }
 
+        private bool _lastTouch;
+
         private void HandleInput(InputManager input)
         {
+            _lastTouch = input.IsTouch;
             // Qismlarni hujumga yuborish: tugmalar (sichqoncha) yoki 1-4, 5 — hammasi
             bool overPanel = false;
             foreach (var b in _groupButtons)
             {
                 if (!b.Rect.Contains(input.MouseVector.ToPoint())) continue;
                 overPanel = true;
-                if (input.LeftPressed) { if (b.Key == "all") SendAll(); else SendGroup(b.Key); }
+                if (input.LeftPressed)
+                {
+                    if (b.Key == "all") SendAll();
+                    else if (b.Key == "possess") PossessPick(input);
+                    else SendGroup(b.Key);
+                }
             }
             if (overPanel) input.MouseOverUI = true;
             Keys[] num = { Keys.D1, Keys.D2, Keys.D3, Keys.D4 };
@@ -404,12 +412,15 @@ namespace AndijonSaltanatlar.Combat
                 if (_renderer.PickAt(world, _map, _buildings, _units) is Unit u && u.Team == UnitTeam.Player && !u.IsDown && IsFighter(u))
                     _state.Select(u);
             }
-            if (input.KeyPressed(Keys.F) || input.KeyPressed(Keys.Space))
-            {
-                Unit pick = _state.Selected as Unit;
-                if (pick == null || pick.IsDown || pick.Team != UnitTeam.Player || !_units.Units.Contains(pick)) pick = NearestAlly(IsoMath.WorldToTileF(_camera.Position));
-                if (pick != null) _combat.TryPossess(pick);
-            }
+            if (input.KeyPressed(Keys.F) || input.KeyPressed(Keys.Space)) PossessPick(input);
+        }
+
+        private void PossessPick(InputManager input)
+        {
+            if (_combat.Possessed != null) return;
+            Unit pick = _state.Selected as Unit;
+            if (pick == null || pick.IsDown || pick.Team != UnitTeam.Player || !_units.Units.Contains(pick)) pick = NearestAlly(IsoMath.WorldToTileF(_camera.Position));
+            if (pick != null) _combat.TryPossess(pick);
         }
 
         private Unit NearestAlly(Vector2 tile)
@@ -732,9 +743,22 @@ namespace AndijonSaltanatlar.Combat
             }
 
             DrawDeployPanel(sb, vw, vh, k);
+            // Telefon: "ICHIGA KIRISH" tugmasi (F klavishi yo'q)
+            if (_lastTouch && _combat.Possessed == null && _phase < Phase.Captured)
+            {
+                string pl = "ICHIGA KIRISH";
+                int ps = 2 * k;
+                Vector2 pm = _font.Measure(pl, ps);
+                var pr = new Rectangle(vw - (int)pm.X - 40 * k, vh - (int)pm.Y - 150 * k, (int)pm.X + 28 * k, (int)pm.Y + 24 * k);
+                sb.Draw(px, new Rectangle(pr.X - 2, pr.Y - 2, pr.Width + 4, pr.Height + 4), new Color(236, 196, 110));
+                sb.Draw(px, pr, new Color(150, 40, 30));
+                _font.DrawCentered(sb, pl, pr.Center.ToVector2(), Color.White, ps);
+                _groupButtons.Add((pr, "possess"));
+            }
             if (_combat.Possessed == null && _phase < Phase.Captured && _groups.Keys.All(_sent.Contains))
             {
-                string hint = "Jangchini bosing va F - ichiga kirib o'zingiz urishing  |  Esc - chekinish";
+                string hint = _lastTouch ? "Jangchiga teging va ICHIGA KIRISH - o'zingiz urishing  |  Orqaga - chekinish"
+                    : "Jangchini bosing va F - ichiga kirib o'zingiz urishing  |  Esc - chekinish";
                 int hs = 2 * k;
                 while (hs > k && _font.Measure(hint, hs).X > vw - 30) hs--;
                 Vector2 hm = _font.Measure(hint, hs);

@@ -1233,6 +1233,37 @@ public sealed class Game1 : Game
 		LoadCloudGame();
 	}
 
+	/// <summary>Telefon: ekrandagi joystik (chapda) va tugmalar (o'ngda) — faqat sensorli rejimda va jang paytida.</summary>
+	private void DrawTouchPad()
+	{
+		if (!_input.TouchPadEnabled || !_input.IsTouch) return;
+		Texture2D px = _assets.Pixel;
+		_sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+		_input.StickGeometry(out Vector2 c, out float r);
+		void Disc(Vector2 at, float rad, Color col)
+		{
+			for (int y = (int)-rad; y <= (int)rad; y += 2)
+			{
+				int hw = (int)MathF.Sqrt(Math.Max(0f, rad * rad - y * y));
+				_sb.Draw(px, new Rectangle((int)at.X - hw, (int)at.Y + y, hw * 2, 2), col);
+			}
+		}
+		Disc(c, r, Color.Black * 0.32f);
+		Disc(c, r * 0.96f, new Color(236, 196, 110) * 0.14f);
+		Disc(c + _input.StickVector * r * 0.55f, r * 0.42f, _input.StickActive ? new Color(255, 214, 90) * 0.8f : new Color(220, 200, 160) * 0.5f);
+		for (int i = 0; i < 4; i++)
+		{
+			Rectangle b = _input.PadButton(i, out string label, out Keys key);
+			bool held = _input.PadKeyHeld(key);
+			Vector2 bc = b.Center.ToVector2();
+			Disc(bc, b.Width / 2f, held ? new Color(255, 214, 90) * 0.85f : i == 0 ? new Color(150, 40, 30) * 0.8f : Color.Black * 0.55f);
+			int s = i == 0 ? 3 : 2;
+			while (s > 1 && _font.Measure(label, s).X > b.Width - 8) s--;
+			_font.DrawCentered(_sb, label, bc, held ? Color.Black : Color.White, s);
+		}
+		_sb.End();
+	}
+
 	/// <summary>Yurish boshlandi: xarita yopiladi, kamera qo'shinxonaga — jangchilar qismlar bo'yicha chiqib, darvozadan ketadi.</summary>
 	private void StartMarchOutParade(string targetName)
 	{
@@ -1516,6 +1547,14 @@ public sealed class Game1 : Game
 		}
 		float num = (float)gameTime.ElapsedGameTime.TotalSeconds;
 		_input.Update(IsActive);
+		// Telefon: jangchi ichida yoki saroy jangida ekranda joystik va tugmalar
+		{
+			Viewport tv = GraphicsDevice.Viewport;
+			_input.TouchPadSize = new Point(tv.Width, tv.Height);
+			bool siegeFight = _siege != null && _siege.Active && (_siege.Combat?.Possessed != null || _siege.InPalace);
+			bool cityFight = _siege == null || !_siege.Active ? (_combat?.Possessed != null || (_interior?.Active ?? false)) : false;
+			_input.TouchPadEnabled = (siegeFight || cityFight) && !_onlinePanel.IsOpen;
+		}
 		_cloud?.Pump();
 		_cloud?.Tick((float)gameTime.ElapsedGameTime.TotalSeconds);
 		// Yangilash oynasi (modal): GitHub'da yangi versiya topilsa, har qanday rejim ustidan ko'rsatiladi.
@@ -2493,6 +2532,7 @@ public sealed class Game1 : Game
 				DrawOnline();
 			}
 		}
+		DrawTouchPad();
 		DrawUpdateOverlay();
 		if (flag)
 		{

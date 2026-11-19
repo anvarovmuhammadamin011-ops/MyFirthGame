@@ -37,6 +37,68 @@ namespace AndijonSaltanatlar.Core
         // --- Matn kiritish (Window.TextInput yoki Android ekran klaviaturasi) ---
         private readonly Queue<char> _text = new Queue<char>();
 
+        // --- EKRANDAGI BOSHQARUV (telefon): joystik + tugmalar -> virtual klaviatura tugmalari ---
+        private readonly HashSet<Keys> _vk = new HashSet<Keys>(), _prevVk = new HashSet<Keys>();
+        /// <summary>Jangchi ichida / saroy jangida: ekranda joystik va tugmalar (Game1 har kadr o'rnatadi).</summary>
+        public bool TouchPadEnabled { get; set; }
+        /// <summary>Ekran o'lchami (joystik va tugmalar joylashuvi uchun).</summary>
+        public Point TouchPadSize { get; set; } = new Point(1280, 720);
+        /// <summary>Joystik og'ishi (-1..1), chizish uchun.</summary>
+        public Vector2 StickVector { get; private set; }
+        public bool StickActive { get; private set; }
+
+        /// <summary>Joystik markazi va radiusi (ekran pikselida).</summary>
+        public void StickGeometry(out Vector2 center, out float radius)
+        {
+            radius = Math.Max(60f, TouchPadSize.Y * 0.14f);
+            center = new Vector2(radius * 1.45f, TouchPadSize.Y - radius * 1.45f);
+        }
+
+        /// <summary>Tugmalar: 0 — ZARBA (Space), 1 — CHIQISH (F), 2 — BOSHQASI (E), 3 — YUGURISH (Shift).</summary>
+        public Rectangle PadButton(int i, out string label, out Keys key)
+        {
+            float r = Math.Max(60f, TouchPadSize.Y * 0.14f);
+            int big = (int)(r * 1.25f), small = (int)(r * 1.0f);
+            int W = TouchPadSize.X, H = TouchPadSize.Y;
+            switch (i)
+            {
+                case 0: label = "ZARBA"; key = Keys.Space; return new Rectangle(W - big - (int)(r * 0.45f), H - big - (int)(r * 0.45f), big, big);
+                case 1: label = "CHIQISH"; key = Keys.F; return new Rectangle(W - small - (int)(r * 0.45f), H - big - small - (int)(r * 0.8f), small, small);
+                case 2: label = "BOSHQASI"; key = Keys.E; return new Rectangle(W - big - small - (int)(r * 0.8f), H - small - (int)(r * 0.45f), small, small);
+                default: label = "YUGUR"; key = Keys.LeftShift; return new Rectangle(W - big - small - (int)(r * 0.8f), H - 2 * small - (int)(r * 0.8f), small, small);
+            }
+        }
+
+        /// <summary>Barmoq ekrandagi boshqaruv ustidami (bunday teginish tap/sudrash hisoblanmaydi).</summary>
+        private bool ConsumeByPad(Vector2 p)
+        {
+            if (!TouchPadEnabled) return false;
+            StickGeometry(out Vector2 c, out float r);
+            Vector2 d = p - c;
+            if (d.Length() <= r * 1.6f)
+            {
+                Vector2 v = d / r;
+                if (v.Length() > 1f) v.Normalize();
+                StickVector = v;
+                StickActive = true;
+                if (v.X < -0.35f) _vk.Add(Keys.A);
+                if (v.X > 0.35f) _vk.Add(Keys.D);
+                if (v.Y < -0.35f) _vk.Add(Keys.W);
+                if (v.Y > 0.35f) _vk.Add(Keys.S);
+                return true;
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                Rectangle b = PadButton(i, out _, out Keys k);
+                b.Inflate(10, 10);
+                if (b.Contains((int)p.X, (int)p.Y)) { _vk.Add(k); return true; }
+            }
+            return false;
+        }
+
+        /// <summary>Ekrandagi tugma hozir bosilganmi (chizishda yoritish uchun).</summary>
+        public bool PadKeyHeld(Keys k) => _vk.Contains(k);
+
         /// <summary>UI har kadr o'rnatadi: sichqoncha panel ustidami?</summary>
         public bool MouseOverUI { get; set; }
 
@@ -119,19 +181,28 @@ namespace AndijonSaltanatlar.Core
             _tap = false;
             _pinchDelta = 0;
             _tPrevPos = _tPos;
+            _prevVk.Clear();
+            foreach (Keys k in _vk) _prevVk.Add(k);
+            _vk.Clear();
+            StickActive = false;
+            StickVector = Vector2.Zero;
 
             TouchCollection touches;
             try { touches = windowActive ? TouchPanel.GetState() : default; }
             catch { touches = default; } // sensor qo'llab-quvvatlanmaydigan platforma
 
             int count = 0;
+            bool any = false;
             Vector2 a = Vector2.Zero, b = Vector2.Zero;
             foreach (TouchLocation t in touches)
             {
                 if (t.State != TouchLocationState.Pressed && t.State != TouchLocationState.Moved) continue;
+                any = true;
+                if (ConsumeByPad(t.Position)) continue; // joystik/tugma — xaritani surmaydi, tap emas
                 if (count == 0) a = t.Position; else if (count == 1) b = t.Position;
                 count++;
             }
+            if (any) _touchMode = true;
 
             if (count > 0)
             {
@@ -166,7 +237,7 @@ namespace AndijonSaltanatlar.Core
                 _tPanning = false;
                 _pinchDist = -1f;
                 // Sichqoncha qimirlasa yoki bosilsa — PC rejimiga qaytamiz.
-                if (_touchMode && !_tap && (_ms.Position != _prevMs.Position || _ms.LeftButton == ButtonState.Pressed)) _touchMode = false;
+                if (_touchMode && !_tap && !any && (_ms.Position != _prevMs.Position || _ms.LeftButton == ButtonState.Pressed)) _touchMode = false;
             }
         }
 
@@ -183,8 +254,8 @@ namespace AndijonSaltanatlar.Core
             return c;
         }
 
-        public bool KeyDown(Keys k) => _kb.IsKeyDown(k);
-        public bool KeyPressed(Keys k) => (_kb.IsKeyDown(k) && !_prevKb.IsKeyDown(k)) || (k == Keys.Escape && BackPressed);
+        public bool KeyDown(Keys k) => _kb.IsKeyDown(k) || _vk.Contains(k);
+        public bool KeyPressed(Keys k) => (_kb.IsKeyDown(k) && !_prevKb.IsKeyDown(k)) || (_vk.Contains(k) && !_prevVk.Contains(k)) || (k == Keys.Escape && BackPressed);
 
         /// <summary>Android "Orqaga" tugmasi shu kadrda bosildi (Esc kabi ishlaydi: panelni yopadi, o'yindan chiqmaydi).</summary>
         public bool BackPressed { get; private set; }
