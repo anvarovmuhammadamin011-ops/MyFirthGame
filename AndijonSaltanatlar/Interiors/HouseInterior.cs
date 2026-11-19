@@ -54,6 +54,8 @@ namespace AndijonSaltanatlar.Interiors
             public float Lift;       // taxtda o'tirgan shoh — balandroq
             public bool IsShah;
             public bool FixedFacing; // taxtdagi shoh doim zalga qaraydi
+            public string ChatText;  // o'zaro suhbat (ambient gaplashish) matni
+            public float ChatTime;   // suhbat pufagi qolgan ko'rsatish vaqti
         }
 
         private readonly Dictionary<string, Texture2D> _tex = new Dictionary<string, Texture2D>();
@@ -98,6 +100,25 @@ namespace AndijonSaltanatlar.Interiors
         private float _bakerTime;
         private Vector2 _bakerHome;
         private readonly Random _brng = new Random();
+
+        // ---- Ambient suhbat: uy/bino ichidagi odamlar o'zaro gaplashadi ----
+        private float _chatTimer = 4f;
+        private float _replyDelay;
+        private string _pendingReply;
+        private Resident _replyFrom;
+        private static readonly (string Say, string Reply)[] SmallTalk =
+        {
+            ("Ishlaringiz qalay?", "Shukr, yurib turibmiz."),
+            ("Bugun havo yaxshi-a?", "Ha, ko'ngilga yoqadi."),
+            ("Osh-noningiz tayyormi?", "Tayyor bo'lay deb qoldi."),
+            ("Bolalar tinchmi?", "Tinch, hovlida o'ynashyapti."),
+            ("Choy damladim, keling.", "Rahmat, hozir boraman."),
+            ("Bozor narxi qalay ekan?", "Un biroz qimmatlashibdi."),
+            ("Mehmon kutyapmizmi?", "Ha, qo'shnilar kelarmish."),
+            ("Tandirga o't yoqdingmi?", "Yoqdim, non yopsa bo'ladi."),
+            ("Hordiq olib o'tiring.", "Rahmat, charchamadim."),
+            ("Yana ko'rishaylik.", "Albatta, xush kelibsiz."),
+        };
 
         private int Bread
         {
@@ -234,6 +255,7 @@ namespace AndijonSaltanatlar.Interiors
             CurrentPose = Pose.Stand;
             _carryBread = false;
             _baker = null;
+            _chatTimer = 3f; _replyDelay = 0f; _pendingReply = null; _replyFrom = null;
             InteriorState st = InteriorStore.For(building.Id);
             st.Visited = true;
             avatar.DriveIdle();
@@ -834,6 +856,7 @@ namespace AndijonSaltanatlar.Interiors
             if (!Active || _avatar == null) return;
             _time += dt;
             UpdateFamilyBaker(dt);
+            UpdateChatter(dt);
             if (input == null) { _avatar.DriveIdle(); return; }
 
             // Saroyda shoh yonida F — shohga aylanib shaharga chiqish
@@ -890,6 +913,41 @@ namespace AndijonSaltanatlar.Interiors
         // ==================================================================
         // INTERAKTIV OBYEKTLAR (ma'lumotga asoslangan harakatlar)
         // ==================================================================
+
+        /// <summary>Uy/bino ichidagi odamlar o'zaro gaplashadi: vaqti-vaqti bilan biri gap boshlaydi, boshqasi javob beradi.</summary>
+        private void UpdateChatter(float dt)
+        {
+            for (int i = 0; i < _residents.Count; i++)
+                if (_residents[i].ChatTime > 0f) _residents[i].ChatTime -= dt;
+
+            if (_replyDelay > 0f)
+            {
+                _replyDelay -= dt;
+                if (_replyDelay <= 0f && _replyFrom != null && _pendingReply != null)
+                {
+                    _replyFrom.ChatText = _pendingReply;
+                    _replyFrom.ChatTime = 3.2f;
+                    _replyFrom = null; _pendingReply = null;
+                }
+            }
+
+            _chatTimer -= dt;
+            if (_chatTimer > 0f || _residents.Count == 0) return;
+            _chatTimer = 6f + (float)_brng.NextDouble() * 6f;
+
+            Resident speaker = _residents[_brng.Next(_residents.Count)];
+            if (speaker == _baker || speaker.ChatTime > 0f) return; // band yoki hozir gapiryapti
+            var pair = SmallTalk[_brng.Next(SmallTalk.Length)];
+            speaker.ChatText = pair.Say;
+            speaker.ChatTime = 3.4f;
+
+            if (_residents.Count > 1)
+            {
+                Resident replier;
+                do { replier = _residents[_brng.Next(_residents.Count)]; } while (replier == speaker);
+                if (replier != _baker) { _replyFrom = replier; _pendingReply = pair.Reply; _replyDelay = 1.7f; }
+            }
+        }
 
         private void UpdateNearHotspot()
         {
@@ -1533,12 +1591,11 @@ namespace AndijonSaltanatlar.Interiors
                 string name = isNear ? r.Name : r.Short;
                 Color nameCol = r.IsShah ? new Color(255, 214, 90) : isNear ? new Color(255, 220, 120) : new Color(230, 220, 200);
                 Label(sb, px, font, sp, name, nameCol, new Color(0, 0, 0, 140));
-                if (isNear)
-                {
-                    if (!string.IsNullOrEmpty(r.Info)) Label(sb, px, font, sp + new Vector2(0, 16), r.Info, new Color(200, 190, 170), new Color(0, 0, 0, 120));
-                    Bubble(sb, px, font, sp + new Vector2(0, -26), r.Line);
-                    if (r.IsShah) Label(sb, px, font, sp + new Vector2(0, 34), "[F] SHOH BO'LIB SHAHARGA CHIQISH", new Color(255, 214, 90), new Color(60, 20, 10, 220));
-                }
+                // Suhbat pufagi: o'zaro gaplashayotgan odamlar (yaqin bo'lmasa ham), aks holda yaqindagining salomi
+                string bubble = r.ChatTime > 0f && !string.IsNullOrEmpty(r.ChatText) ? r.ChatText : (isNear ? r.Line : null);
+                if (isNear && !string.IsNullOrEmpty(r.Info)) Label(sb, px, font, sp + new Vector2(0, 16), r.Info, new Color(200, 190, 170), new Color(0, 0, 0, 120));
+                if (!string.IsNullOrEmpty(bubble)) Bubble(sb, px, font, sp + new Vector2(0, -26), bubble);
+                if (isNear && r.IsShah) Label(sb, px, font, sp + new Vector2(0, 34), "[F] SHOH BO'LIB SHAHARGA CHIQISH", new Color(255, 214, 90), new Color(60, 20, 10, 220));
             }
 
             // Non yopayotgan oila a'zosi — nima qilayotgani doim ko'rinadi
