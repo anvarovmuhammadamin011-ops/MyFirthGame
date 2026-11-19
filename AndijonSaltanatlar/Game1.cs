@@ -1647,7 +1647,7 @@ public sealed class Game1 : Game
 			Point uv = LegacyUiSize(out float us);
 			_ui.Touch = _input.IsTouch || _opt.Phone;
 			_input.PointerScale = us;
-			if (_storyOverlay != null) _storyOverlay.HideTracker = _ui.BlocksTracker;
+			if (_storyOverlay != null) _storyOverlay.HideTracker = true; // yonboshdagi missiya kartasi olib tashlandi
 			_storyOverlay?.Update(_input, num, uv.X, uv.Y);
 			// Vazir ekran xabari (missiya/muhim voqea) — navbatni olib, ko'rsatamiz.
 			if (_vizierPopup != null)
@@ -2683,7 +2683,7 @@ public sealed class Game1 : Game
 		{
 			BeginLegacyUi(out Point v);
 			_storyOverlay.RightInset = _state.Selected != null ? 248 : 0;
-			_storyOverlay.HideTracker = _ui.BlocksTracker;
+			_storyOverlay.HideTracker = true; // yonboshdagi missiya kartasi olib tashlandi
 			_storyOverlay.Draw(_sb, v.X, v.Y);
 			_sb.End();
 		}

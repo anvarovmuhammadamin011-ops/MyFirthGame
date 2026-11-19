@@ -145,8 +145,6 @@ namespace AndijonSaltanatlar.UI
                 ("DIAGNOSTIKA", Tab.Diag),
                 ("FERMERLIK", Tab.Farm),
                 ("MISSIYA", Tab.Mission),
-                ("BEZASH", Tab.Beautify),
-                ("TOPISH", Tab.Find),
                 (Texts.TabCivilization, Tab.Civ),
                 ("DUNYO", Tab.World),
                 (Texts.TabSettings, Tab.Settings),
@@ -215,16 +213,15 @@ namespace AndijonSaltanatlar.UI
                 int maxCols = Math.Max(1, (vw - 24) / 158);
                 int panelW = Math.Min(vw - 24, maxCols * (bw + gx) - gx + 12);
                 int cols = Math.Min(maxCols, Math.Max(1, (panelW - 12 + gx) / (bw + gx)));
+                // Kategoriya filtri olib tashlandi — barcha binolar bitta ro'yxatda ko'rinadi.
                 var shown = new List<CatalogEntry>();
                 for (int i = 0; i < BuildingCatalog.Buildable.Count; i++)
-                    if (_buildCat == 0 || BuildCatOf(BuildingCatalog.Buildable[i]) == _buildCat) shown.Add(BuildingCatalog.Buildable[i]);
+                    shown.Add(BuildingCatalog.Buildable[i]);
                 int rows = Math.Max(1, (shown.Count + cols - 1) / cols);
-                int tabsH = 54;
+                int tabsH = 8;
                 int panelH = rows * (bh + gy) + tabsH + 12;
                 _panelRect = new Rectangle(12, vh - BottomH - panelH - 6, panelW, panelH);
-                int tabW = (panelW - 18) / 4, tabH = 22;
-                for (int i = 0; i < BuildCats.Length; i++)
-                    _buildCatRects[i] = new Rectangle(_panelRect.X + 6 + (i % 4) * tabW, _panelRect.Y + 6 + (i / 4) * (tabH + 4), tabW - 4, tabH);
+                for (int i = 0; i < _buildCatRects.Length; i++) _buildCatRects[i] = Rectangle.Empty;
                 int sx = _panelRect.X + 6, sy = _panelRect.Y + tabsH + 6;
                 for (int i = 0; i < shown.Count; i++)
                 {
@@ -424,8 +421,6 @@ namespace AndijonSaltanatlar.UI
                     if (t == Tab.Civ) { OpenCivRequested = true; return; } // to'liq ekran
                     if (t == Tab.World) { OpenWorldRequested = true; return; } // saltanat xaritasi (to'liq ekran)
                     if (t == Tab.Mission) { OpenMissionsRequested = true; return; } // MISSIYALAR ro'yxati (to'liq ekran)
-                    if (t == Tab.Beautify) { BeautifyRequested = true; return; } // shaharni rang-barang bezaklar bilan bezash
-                    if (t == Tab.Find) { FindNextRequested = true; return; } // binoni topib, kamera o'sha joyga boradi
                     if (_tab == t) { _tab = Tab.None; if (t == Tab.Build) _state.CancelBuild(); }
                     else _tab = t;
                     return;
@@ -637,12 +632,6 @@ namespace AndijonSaltanatlar.UI
         private void DrawBuildMenu(SpriteBatch sb)
         {
             Panel(sb, _panelRect, PanelBg, Border, 2);
-            for (int i = 0; i < _buildCatRects.Length; i++)
-            {
-                bool on = _buildCat == i;
-                Panel(sb, _buildCatRects[i], on ? PanelBg2 : PanelBg, on ? Gold : Border, on ? 2 : 1);
-                DrawButtonText(sb, BuildCats[i], _buildCatRects[i], on ? Gold : Muted);
-            }
             foreach (var (entry, rect) in _menuItems)
             {
                 bool unlocked = _state.IsBuildingUnlocked(entry.Type);
