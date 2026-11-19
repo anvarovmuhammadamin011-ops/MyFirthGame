@@ -81,6 +81,8 @@ public sealed class Game1 : Game
 
 	private AndijonSaltanatlar.World.CurfewController _curfew;
 
+	private AndijonSaltanatlar.World.CartSystem _carts;
+
 	// Soliq g'alayoni: aholi solig'i 30%+ bo'lsa xalq saroy oldiga chiqib tosh otadi
 	private AndijonSaltanatlar.CityLife.TaxRiotSystem _taxRiot;
 
@@ -520,6 +522,7 @@ public sealed class Game1 : Game
 		_birds = new BirdSystem(_assets, _map, _units);
 		_livestock = new LivestockSystem(_assets, _map, _units, _buildings);
 		_curfew = new AndijonSaltanatlar.World.CurfewController();
+		_carts = new AndijonSaltanatlar.World.CartSystem(_assets);
 		_taxRiot = new AndijonSaltanatlar.CityLife.TaxRiotSystem();
 		_announcedSeason = null;
 		_governor = new AIGovernorManager
@@ -1855,6 +1858,7 @@ public sealed class Game1 : Game
 		_renderer.Tick(dt);
 		_birds?.Update(dt, _dayNight.NightAmount, _combat.Possessed);
 		_livestock?.Update(dt);
+		_carts?.Update(dt, _map, _buildings, _state);
 		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
 		_citizenSocial.Update(_units, dt);
 		_citizenLife?.Update(dt, _map, _buildings, _units, _state, _combat.Possessed);
@@ -2445,6 +2449,7 @@ public sealed class Game1 : Game
 		_worldExtras.Clear();
 		if (_birds != null) _worldExtras.AddRange(_birds.GroundObjects);
 		if (_livestock != null) _worldExtras.AddRange(_livestock.GroundObjects);
+		if (_carts != null) _worldExtras.AddRange(_carts.Objects);
 		_renderer.Draw(_sb, visibleWorldRect, _map, _buildings, _units, _worldExtras);
 		_taxRiot?.DrawAir(_sb, _assets.Pixel);
 		_birds?.DrawSky(_sb, visibleWorldRect);
