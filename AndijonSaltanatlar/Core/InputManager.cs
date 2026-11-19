@@ -39,6 +39,11 @@ namespace AndijonSaltanatlar.Core
 
         // --- EKRANDAGI BOSHQARUV (telefon): joystik + tugmalar -> virtual klaviatura tugmalari ---
         private readonly HashSet<Keys> _vk = new HashSet<Keys>(), _prevVk = new HashSet<Keys>();
+        /// <summary>Shu kadrda ekrandagi tezkor tugma bosgan klaviatura tugmalari (bir martalik bosish).</summary>
+        private readonly HashSet<Keys> _injected = new HashSet<Keys>();
+
+        /// <summary>Telefon: ekrandagi tugma klaviatura tugmasini shu kadr uchun "bosadi" (M, F, Enter, K ...).</summary>
+        public void InjectPress(Keys k) => _injected.Add(k);
         /// <summary>Jangchi ichida / saroy jangida: ekranda joystik va tugmalar (Game1 har kadr o'rnatadi).</summary>
         public bool TouchPadEnabled { get; set; }
         /// <summary>Ekran o'lchami (joystik va tugmalar joylashuvi uchun).</summary>
@@ -134,6 +139,7 @@ namespace AndijonSaltanatlar.Core
 
         public void Update(bool windowActive)
         {
+            _injected.Clear();
             _prevKb = _kb;
             _prevMs = _ms;
             if (windowActive)
@@ -255,7 +261,7 @@ namespace AndijonSaltanatlar.Core
         }
 
         public bool KeyDown(Keys k) => _kb.IsKeyDown(k) || _vk.Contains(k);
-        public bool KeyPressed(Keys k) => (_kb.IsKeyDown(k) && !_prevKb.IsKeyDown(k)) || (_vk.Contains(k) && !_prevVk.Contains(k)) || (k == Keys.Escape && BackPressed);
+        public bool KeyPressed(Keys k) => (_kb.IsKeyDown(k) && !_prevKb.IsKeyDown(k)) || (_vk.Contains(k) && !_prevVk.Contains(k)) || _injected.Contains(k) || (k == Keys.Escape && BackPressed);
 
         /// <summary>Android "Orqaga" tugmasi shu kadrda bosildi (Esc kabi ishlaydi: panelni yopadi, o'yindan chiqmaydi).</summary>
         public bool BackPressed { get; private set; }

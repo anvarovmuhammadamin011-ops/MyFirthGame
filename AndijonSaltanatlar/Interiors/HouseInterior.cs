@@ -1708,6 +1708,7 @@ namespace AndijonSaltanatlar.Interiors
 
             if (_fight) DrawFightOverlay(sb, px, font, m);
             string hint = _fight ? (TouchUi ? "Joystik - yurish  |  ZARBA - urish  |  eshik - chiqish" : "WASD yurish | SPACE / sichqoncha - zarba | SHIFT yugurish | eshik - chiqish")
+                : TouchUi ? "Joystik - yurish  |  CHIQ yoki eshik - tashqariga chiqish"
                 : _kind == InteriorKind.House || _palace
                 ? "WASD yurish | SHIFT yugurish | ENTER / ESC yoki eshik - tashqariga chiqish"
                 : "WASD yurish | E harakat | Q ikkinchi harakat | ESC - tashqariga chiqish";

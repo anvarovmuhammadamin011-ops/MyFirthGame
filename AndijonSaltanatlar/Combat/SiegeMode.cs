@@ -184,7 +184,7 @@ namespace AndijonSaltanatlar.Combat
             _manualCam = 0f;
             Active = true;
             ShowBanner("QAMAL: " + t.RegionName.ToUpperInvariant() + "!  Qo'shin darvoza oldida saf tortdi", 5f);
-            _state.ShowMessage("Qaysi qism birinchi hujumga borsin? Pastdagi tugmalar yoki 1-4, hammasi — 5");
+            _state.ShowMessage("Qaysi qism birinchi hujumga borsin? Pastdagi tugmalardan birini tanlang");
             return true;
         }
 
@@ -338,6 +338,7 @@ namespace AndijonSaltanatlar.Combat
             _time += dt;
             if (_bannerTimer > 0f) _bannerTimer -= dt;
             if (input != null) _lastTouch = input.IsTouch;
+            if (_combat != null) _combat.TouchUi = _lastTouch;
 
             bool inside = _interior.Active;
             if (inside) _interior.Update(dt, input);

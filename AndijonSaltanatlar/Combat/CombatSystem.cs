@@ -191,6 +191,9 @@ namespace AndijonSaltanatlar.Combat
         /// <summary>O'yinchi hozir boshqarayotgan unit (yoki null).</summary>
         public Unit Possessed { get; private set; }
 
+        /// <summary>Telefon (sensorli ekran): ko'rsatmalar ekrandagi tugmalarga mos, boshqaruv paneli ixcham va tepada.</summary>
+        public bool TouchUi { get; set; }
+
         // --- QAMAL (dushman shahriga hujum) ---
         /// <summary>Qamal rejimi: o'yinchi qo'shini (Player) dushman shahrida; dushman askarlari (Enemy) himoyalanadi.</summary>
         public bool SiegeMode { get; set; }
@@ -308,7 +311,9 @@ namespace AndijonSaltanatlar.Combat
             if (_agents.TryGetValue(u, out Agent a)) a.Mode = AgentMode.Possessed; // uy joyi saqlanadi
             else _agents[u] = new Agent { Unit = u, Mode = AgentMode.Possessed, Home = u.Position };
             _state.Select(u);
-            string controls = u is CitizenUnit
+            string controls = TouchUi
+                ? (u is CitizenUnit ? "Joystik — yurish, BOSHQA — ish, CHIQ — chiqish" : "Joystik — yurish, ZARBA — urish, CHIQ — chiqish")
+                : u is CitizenUnit
                 ? "WASD — yurish, E — ish, F — chiqish"
                 : "WASD — yurish, Space/sichqoncha — zarba, F — chiqish";
             _state.ShowMessage("Siz endi: " + u.Name + ".  " + controls);
@@ -1520,6 +1525,21 @@ namespace AndijonSaltanatlar.Combat
         {
             Unit p = Possessed;
             int k = _k;
+            if (TouchUi)
+            {
+                // Telefon: tepada ixcham — ism va jon chizig'i (pastki burchaklar joystik va tugmalarga band)
+                int tw = Math.Min(vw - 40 * k, 420 * k), th = 40 * k;
+                var tr = new Rectangle(vw / 2 - tw / 2, 58 * k, tw, th);
+                sb.Draw(px, new Rectangle(tr.X - 2, tr.Y - 2, tr.Width + 4, tr.Height + 4), new Color(216, 167, 83, 220));
+                sb.Draw(px, tr, new Color(24, 20, 18, 225));
+                font.Draw(sb, "SIZ: " + p.Name.ToUpperInvariant(), new Vector2(tr.X + 10 * k, tr.Y + 5 * k), new Color(255, 214, 90), 2 * k);
+                int hbw = tw - 20 * k, hbh = 8 * k;
+                float fr = p.MaxHitPoints > 0 ? (float)p.HitPoints / p.MaxHitPoints : 0f;
+                var hb = new Rectangle(tr.X + 10 * k, tr.Bottom - hbh - 6 * k, hbw, hbh);
+                sb.Draw(px, new Rectangle(hb.X - 1, hb.Y - 1, hb.Width + 2, hb.Height + 2), Color.Black);
+                sb.Draw(px, new Rectangle(hb.X, hb.Y, (int)(hbw * fr), hbh), fr > 0.35f ? new Color(90, 200, 110) : new Color(220, 70, 50));
+                return;
+            }
             // Boshqaruv yo'riqnomasi ikki qatorda va o'qiladigan o'lchamda (oldin bir qatorda mayda bo'lib, panelga sig'masdi)
             string[] help =
             {

@@ -1307,6 +1307,64 @@ public sealed class Game1 : Game
 		LoadCloudGame();
 	}
 
+	// ------------------------------------------------------------------ TELEFON: klaviatura tugmalari o'rniga ekrandagi tezkor tugmalar
+	private readonly System.Collections.Generic.List<(Rectangle R, Keys Key, string Label, Color Fill)> _touchActions = new System.Collections.Generic.List<(Rectangle, Keys, string, Color)>();
+	private bool _touchActionTapped;
+
+	/// <summary>Teginilgan tezkor tugma tegishli klaviatura tugmasini shu kadr uchun "bosadi" (HandleHotkeys o'sha zahoti bajaradi).</summary>
+	private void HandleTouchActions()
+	{
+		_touchActionTapped = false;
+		if (!_input.IsTouch || !_input.LeftPressed) return;
+		Point p = _input.MousePosition;
+		foreach (var a in _touchActions)
+			if (a.R.Contains(p)) { _input.InjectPress(a.Key); _touchActionTapped = true; return; }
+	}
+
+	/// <summary>Shahar ekranida o'ngda: XARITA (M), ICHIGA KIRISH (F), UYGA KIRISH (Enter), GAPIRISH (E), QO'NG'IROQ (K), BOSQIN (B).</summary>
+	private void DrawTouchActions()
+	{
+		_touchActions.Clear();
+		if (!_input.IsTouch || _loginMode || _menuMode || _strategicMode || _civMode || _questMode || _onlinePanel.IsOpen
+			|| (_interior != null && _interior.Active) || (_siege != null && _siege.Active) || _arena.Active || _ui.AnyPanelOpen
+			|| (_storyOverlay != null && _storyOverlay.DialogueOpen)) return;
+		Viewport vp = GraphicsDevice.Viewport;
+		float ls = LegacyUiScale();
+		int k = Math.Max(1, (int)Math.Round(ls));
+		var items = new System.Collections.Generic.List<(Keys, string, Color)>();
+		Unit possessed = _combat.Possessed;
+		Color gold = new Color(110, 70, 30), red = new Color(150, 40, 30), blue = new Color(40, 70, 120);
+		if (possessed != null)
+		{
+			if (_interior.NearbyHouse != null && !_combat.RaidActive && !_combat.RaidIncoming) items.Add((Keys.Enter, "UYGA KIRISH", red));
+		}
+		else
+		{
+			items.Add((Keys.M, "XARITA", blue));
+			if (_state.Selected is Unit su && !su.IsDown) items.Add((Keys.F, "ICHIGA KIRISH", red));
+			if (_state.Selected is CitizenUnit) items.Add((Keys.E, "GAPIRISH", gold));
+			items.Add((Keys.K, "QO'NG'IROQ", gold));
+			items.Add((Keys.B, "BOSQIN", gold));
+		}
+		if (items.Count == 0) return;
+		int s = 2 * k, w = 0;
+		foreach (var it in items) w = Math.Max(w, (int)_font.Measure(it.Item2, s).X + 24 * k);
+		int h = 30 * k + 8, gap = 6 * k;
+		int x = vp.Width - w - 8 * k;
+		int y = possessed != null ? (int)(vp.Height * 0.2f) : (int)(56 * ls) + 6 * k; // yuqori panel ostida (jangchi ichida — joystik tugmalaridan yuqorida)
+		_sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+		foreach (var (key, label, fill) in items)
+		{
+			var r = new Rectangle(x, y, w, h);
+			_sb.Draw(_assets.Pixel, new Rectangle(r.X - 2, r.Y - 2, r.Width + 4, r.Height + 4), new Color(236, 196, 110) * 0.9f);
+			_sb.Draw(_assets.Pixel, r, fill * 0.92f);
+			_font.DrawCentered(_sb, label, r.Center.ToVector2(), Color.White, s);
+			_touchActions.Add((r, key, label, fill));
+			y += h + gap;
+		}
+		_sb.End();
+	}
+
 	/// <summary>Telefon: ekrandagi joystik (chapda) va tugmalar (o'ngda) — faqat sensorli rejimda va jang paytida.</summary>
 	private void DrawTouchPad()
 	{
@@ -1723,6 +1781,7 @@ public sealed class Game1 : Game
 		_onlinePanel.Update(_input, viewport2.Width, viewport2.Height, num);
 		if (!onlineOpen)
 		{
+			HandleTouchActions();
 			HandleHotkeys();
 		}
 		else if (_input.KeyPressed(Keys.M) && !_onlinePanel.WantsKeyboard)
@@ -1870,12 +1929,18 @@ public sealed class Game1 : Game
 			if (_vizierPopup != null)
 			{
 				while (_state.TryDequeueVizier(out string vzT, out string vzB)) _vizierPopup.Enqueue(vzT, vzB);
+				_vizierPopup.Touch = _input.IsTouch || _opt.Phone;
+				_vizierPopup.Suspended = _ui.AnyPanelOpen || (_storyOverlay != null && _storyOverlay.DialogueOpen) || _interior.Active || _combat.Possessed != null;
+				_ui.HideUnitPanel = (_input.IsTouch || _opt.Phone) && _combat.Possessed != null;
+				_combat.TouchUi = _input.IsTouch || _opt.Phone;
 				_vizierPopup.Update(num, _input, uv.X, uv.Y);
 			}
 			if (!inHouse) _ui.Update(_input, uv.X, uv.Y);
 			// Missiya kartasi ustidagi bosish orqadagi xaritaga o'tmasin
 			if (_storyOverlay != null && _storyOverlay.PointerOverTracker) _input.MouseOverUI = true;
+			if (_vizierPopup != null && _vizierPopup.Covers(_input.MousePosition)) _input.MouseOverUI = true;
 			_input.PointerScale = 1f;
+			if (_touchActionTapped) _input.MouseOverUI = true; // tezkor tugma bosildi — xaritada tanlash bo'lmasin
 			if (!inHouse && _ui.OpenOnlineRequested)
 			{
 				_ui.OpenOnlineRequested = false;
@@ -2629,6 +2694,7 @@ public sealed class Game1 : Game
 				DrawOnline();
 			}
 		}
+		DrawTouchActions();
 		DrawTouchPad();
 		DrawUpdateOverlay();
 		if (flag)

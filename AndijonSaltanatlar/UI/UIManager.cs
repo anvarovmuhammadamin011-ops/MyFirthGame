@@ -151,6 +151,12 @@ namespace AndijonSaltanatlar.UI
             _tabRects = new Rectangle[_tabs.Length];
         }
 
+        /// <summary>Telefon: jangchi ichida bo'lganda o'ng tomondagi unit ma'lumot paneli ko'rsatilmaydi (joystik tugmalari bilan to'qnashmasin).</summary>
+        public bool HideUnitPanel { get; set; }
+
+        /// <summary>Biror panel/oyna ochiq (vazir xabari kutib turishi uchun).</summary>
+        public bool AnyPanelOpen => _tab != Tab.None || TimePanelOpen || PetitionOpen || (_governorPanel != null && _governorPanel.IsOpen);
+
         public void TogglePetition() => PetitionOpen = _state.Petitions.HasActive && !PetitionOpen;
 
         /// <summary>Ochiq pastki panelni yopadi (Android "Orqaga" / Esc). Yopilgan bo'lsa true.</summary>
@@ -293,7 +299,7 @@ namespace AndijonSaltanatlar.UI
 
             if (FarmRequestOpen) LayoutFarmModal(vw, vh);
 
-            _rightVisible = _state.Selected != null;
+            _rightVisible = _state.Selected != null && !(HideUnitPanel && _state.Selected is Unit);
             _rightPanel = new Rectangle(vw - PanelW, TopH + 8, PanelW - 8, vh - BottomH - TopH - 16);
             _upgradeBtn = Rectangle.Empty;
             _moveBtn = Rectangle.Empty;

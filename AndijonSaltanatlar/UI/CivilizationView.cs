@@ -57,8 +57,12 @@ namespace AndijonSaltanatlar.UI
             if (!_showHistory)
             {
                 // Kartalar ekran eniga moslashadi (nomlari karta ichida qoladi).
-                int gx = 360, gy = 92, ch = 66, px = 12, py = 10, cols = 4;
-                int cw = System.Math.Max(170, System.Math.Min(270, (vw - gx - 16 - (cols - 1) * px) / cols));
+                // Ustunlar soni ekran eniga, karta balandligi ekran bo'yiga moslashadi (telefonda ham hammasi ko'rinadi)
+                int gx = 360, gy = 92, px = 12, py = 8;
+                int cols = System.Math.Clamp((vw - gx - 16 + px) / (170 + px), 1, 4);
+                int rows = (TechnologyCatalog.All.Count + cols - 1) / cols;
+                int ch = System.Math.Clamp((vh - gy - 12 - (rows - 1) * py) / System.Math.Max(1, rows), 50, 66);
+                int cw = System.Math.Max(160, System.Math.Min(270, (vw - gx - 16 - (cols - 1) * px) / cols));
                 for (int i = 0; i < TechnologyCatalog.All.Count; i++)
                 {
                     int col = i % cols, row = i / cols;
