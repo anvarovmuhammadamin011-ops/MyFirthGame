@@ -67,11 +67,13 @@ namespace AndijonSaltanatlar.UI
         public bool BeautifyRequested;
         /// <summary>TOPISH bosildi (Game1 keyingi binoga kamerani markazlaydi).</summary>
         public bool FindNextRequested;
+        /// <summary>BIRLASHTIRISH bosildi (Game1 tanlangan dala/bog'ni yonidagilar bilan birlashtiradi).</summary>
+        public bool MergeRequested;
         /// <summary>Katta oyna ochiq (DIAGNOSTIKA, VAQT, murojaat, vazir...) — missiya kartasi ko'rsatilmaydi.</summary>
         public bool BlocksTracker => _tab == Tab.Diag || TimePanelOpen || FarmRequestOpen || PetitionOpen || AdvisorOpen || (_governorPanel?.IsOpen ?? false);
         public bool AdvisorOpen;
         public AIGovernorPanel GovernorPanel => _governorPanel;
-        private Rectangle _upgradeBtn, _moveBtn, _enterBtn;
+        private Rectangle _upgradeBtn, _moveBtn, _enterBtn, _mergeBtn;
         /// <summary>"ICHKARIGA KIRISH" bosildi — Game1 boshqarilayotgan odam bilan interyerga kiradi.</summary>
         public Building EnterRequested { get; set; }
         /// <summary>Devorni tekshirish (ichki xonasi yo'q) so'raldi.</summary>
@@ -300,6 +302,7 @@ namespace AndijonSaltanatlar.UI
             _upgradeBtn = Rectangle.Empty;
             _moveBtn = Rectangle.Empty;
             _enterBtn = Rectangle.Empty;
+            _mergeBtn = Rectangle.Empty;
             int stackY = _rightPanel.Bottom - 40;
             if (_rightVisible && (_state.Selected is Building || _state.Selected is LandParcel))
                 _upgradeBtn = new Rectangle(_rightPanel.X + 14, stackY, _rightPanel.Width - 28, 28);
@@ -307,6 +310,9 @@ namespace AndijonSaltanatlar.UI
                 _moveBtn = new Rectangle(_rightPanel.X + 14, stackY - 36, _rightPanel.Width - 28, 28);
             if (_rightVisible && _state.Selected is Building enterable)
                 _enterBtn = new Rectangle(_rightPanel.X + 14, stackY - 76, _rightPanel.Width - 28, 30);
+            // Dala/bog'ni yonidagisi bilan birlashtirish
+            if (_rightVisible && _state.Selected is Building mgBld && (mgBld.Type == BuildingType.Farm || mgBld.Type == BuildingType.Garden))
+                _mergeBtn = new Rectangle(_rightPanel.X + 14, stackY - 116, _rightPanel.Width - 28, 28);
 
             LayoutTopBar(vw);
             LayoutTimePanel(vw, vh);
@@ -391,6 +397,11 @@ namespace AndijonSaltanatlar.UI
                     _state.ShowMessage(eb.Name + " hali qurilmoqda — " + (int)(eb.BuildProgress * 100) + "% tayyor", true);
                 }
                 else EnterRequested = eb;
+                return;
+            }
+            if (_rightVisible && _mergeBtn != Rectangle.Empty && _mergeBtn.Contains(m) && _state.Selected is Building)
+            {
+                MergeRequested = true;
                 return;
             }
             if (_rightVisible && _moveBtn != Rectangle.Empty && _moveBtn.Contains(m) && _state.Selected is Building mvb)
@@ -948,6 +959,11 @@ namespace AndijonSaltanatlar.UI
             {
                 Panel(sb, _moveBtn, PanelBg2, Border, 1);
                 DrawButtonText(sb, "KO'CHIRISH", _moveBtn, Cream);
+            }
+            if (_mergeBtn != Rectangle.Empty)
+            {
+                Panel(sb, _mergeBtn, PanelBg2, Gold, 1);
+                DrawButtonText(sb, "BIRLASHTIRISH", _mergeBtn, Cream);
             }
             if (_state.Selected is Building bld && BuildingUpgradeSystem.CanUpgrade(bld))
             {

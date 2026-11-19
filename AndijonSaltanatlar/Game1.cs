@@ -1687,6 +1687,11 @@ public sealed class Game1 : Game
 				_ui.FindNextRequested = false;
 				FindNextBuilding();
 			}
+			if (_ui.MergeRequested)
+			{
+				_ui.MergeRequested = false;
+				MergeSelectedBuilding();
+			}
 			if (_ui.OpenWorldRequested)
 			{
 				_ui.OpenWorldRequested = false;
@@ -2710,6 +2715,40 @@ public sealed class Game1 : Game
 		_camera.Jump(center, Math.Max(_camera.Zoom, 1.2f));
 		_state.Select(t);
 		_state.ShowMessage(t.Name + "  (" + (_findIndex + 1) + "/" + list.Count + ")" + (filter != null ? " — shu turdagilar" : ""));
+	}
+
+	/// <summary>BIRLASHTIRISH: tanlangan dala/bog'ni yonidagi bir xil turdagilari bilan birlashtiradi —
+	/// har biri qo'shilgach survivor darajasi (ko'rinishi va hosili) oshadi, yutilganlarining joyi bo'shaydi.</summary>
+	private void MergeSelectedBuilding()
+	{
+		if (!(_state.Selected is Building s) || (s.Type != BuildingType.Farm && s.Type != BuildingType.Garden))
+		{
+			_state.ShowMessage("Faqat dala yoki bog'ni birlashtirish mumkin", true);
+			return;
+		}
+		string word = s.Type == BuildingType.Garden ? "bog'" : "dala";
+		if (s.Level >= AssetManager.MaxArtLevel) { _state.ShowMessage(s.Name + " allaqachon eng katta", true); return; }
+
+		var neighbors = new System.Collections.Generic.List<Building>();
+		foreach (Building b in _buildings.Buildings)
+		{
+			if (b == s || b.Type != s.Type) continue;
+			var ra = new Rectangle(s.Position.X - 1, s.Position.Y - 1, s.Size.X + 2, s.Size.Y + 2);
+			var rb = new Rectangle(b.Position.X, b.Position.Y, b.Size.X, b.Size.Y);
+			if (ra.Intersects(rb)) neighbors.Add(b);
+		}
+		if (neighbors.Count == 0) { _state.ShowMessage("Yonida birlashtirish uchun boshqa " + word + " yo'q", true); return; }
+
+		int merged = 0;
+		foreach (Building n in neighbors)
+		{
+			if (s.Level >= AssetManager.MaxArtLevel) break;
+			_buildings.Remove(n);
+			s.Level = Math.Min(AssetManager.MaxArtLevel, s.Level + 1);
+			merged++;
+		}
+		_state.Select(s);
+		_state.ShowMessage(merged + " ta " + word + " birlashdi — " + s.Name + " endi " + s.Level + "-daraja (kattaroq, ko'proq hosil)");
 	}
 
 	private void DrawOnline()
