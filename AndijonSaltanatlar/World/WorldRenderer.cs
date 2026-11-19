@@ -197,18 +197,7 @@ namespace AndijonSaltanatlar.World
                 // Bino daraja nishoni (evolyutsiya belgisi) — BuildingEvolution
                 if (o is Building b2 && b2.BuildProgress >= 1f)
                 {
-                    int pips = System.Math.Min(4, b2.Level - 1);
-                    if (pips > 0)
-                    {
-                        float cx = pos.X + tex.Width / 2f - pips * 6f / 2f;
-                        float py = pos.Y + 3f;
-                        for (int i = 0; i < pips; i++)
-                        {
-                            var rct = new Rectangle((int)(cx + i * 6), (int)py, 5, 5);
-                            sb.Draw(_assets.Pixel, new Rectangle(rct.X - 1, rct.Y - 1, 7, 7), new Color(20, 20, 24, 220));
-                            sb.Draw(_assets.Pixel, rct, new Color(216, 167, 83));
-                        }
-                    }
+                    // (Bino daraja nuqtalari — "pips" — o'yinchi talabiga ko'ra olib tashlandi.)
 
                     // Kiriladigan bino ustida kichik eshik belgisi (Promt 7) — ichkariga kirish mumkinligини bildiradi.
                     if (AndijonSaltanatlar.Interiors.HouseInterior.IsEnterable(b2))
