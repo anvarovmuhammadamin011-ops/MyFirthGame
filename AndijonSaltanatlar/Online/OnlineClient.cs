@@ -673,24 +673,29 @@ namespace AndijonSaltanatlar.Online
                 HttpResponseMessage resp = await _http.PostAsJsonAsync("api/online/letter",
                     new LetterRequest { CommandId = Guid.NewGuid().ToString("N"), ToKingdomId = toKingdomId, Text = text ?? "" }, Json);
                 if (!resp.IsSuccessStatusCode) { SetMessage(await ErrorText(resp, "Xat yuborilmadi"), true); return; }
-                SetMessage("Xat yuborildi", false);
+                SetMessage("Elchingiz maktubni olib yo'lga chiqdi", false);
+                LoadLetters(false);
             });
         }
 
         /// <summary>Kelgan xatlar qutisini (fonda) yuklaydi.</summary>
-        public void LoadLetters()
+        /// <param name="markRead">true — xatlar qutisi ochildi (kelgan xatlar o'qilgan deb belgilanadi).</param>
+        public void LoadLetters(bool markRead = false)
         {
             if (_http == null) return;
             Task.Run(async () =>
             {
                 try
                 {
-                    LettersResponse dto = await _http.GetFromJsonAsync<LettersResponse>("api/online/letters", Json);
-                    Post(() => { if (dto != null) Inbox = dto; });
+                    LettersResponse dto = await _http.GetFromJsonAsync<LettersResponse>("api/online/letters?read=" + (markRead ? "true" : "false"), Json);
+                    Post(() => { if (dto != null) { Inbox = dto; InboxLoadedAt = DateTime.UtcNow; } });
                 }
                 catch { }
             });
         }
+
+        /// <summary>Xatlar (va elchilar holati) oxirgi yuklangan vaqt — elchi o'rnini silliq hisoblash uchun.</summary>
+        public DateTime InboxLoadedAt { get; private set; }
 
         // ---- Dunyo umumiy chati (real vaqt, SignalR) ----
         /// <summary>Oxirgi chat xabarlari (eng yangisi oxirida).</summary>

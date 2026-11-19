@@ -114,11 +114,11 @@ namespace AndijonSaltanatlar.Server.Controllers
 
         /// <summary>Kelgan xatlar qutisi.</summary>
         [HttpGet("letters")]
-        public async Task<IActionResult> Letters()
+        public async Task<IActionResult> Letters([FromQuery] bool read = true)
         {
             Kingdom k = await MyKingdom();
             if (k == null) return NotFound(new { messageUz = "Avval dunyoga qo'shiling" });
-            return Ok(await _svc.LettersAsync(k));
+            return Ok(await _svc.LettersAsync(k, read));
         }
 
         [HttpGet("state")]

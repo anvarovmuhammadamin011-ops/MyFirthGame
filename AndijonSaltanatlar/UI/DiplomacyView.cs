@@ -4,6 +4,8 @@ using System.Linq;
 using AndijonSaltanatlar.Shared.DTOs;
 using AndijonSaltanatlar.UI.Design;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using AndijonSaltanatlar.Core;
 
 namespace AndijonSaltanatlar.UI
 {
@@ -37,7 +39,17 @@ namespace AndijonSaltanatlar.UI
         }
         private void OpenLetter(WarMapRegionDto r)
         {
-            _dipMode = 3; _dipKingdomId = r.OwnerKingdomId; _dipKingdomName = r.OwnerName; _letterDraft = "";
+            // Xat endi elchi orqali: elchi oynasi shu saltanat tanlangan holda ochiladi
+            OpenEnvoy(r.OwnerKingdomId, r.OwnerName);
+        }
+
+        /// <summary>ELCHI oynasi: maktub yozish, qaysi shohga olib borishini tanlash, elchilar holati.</summary>
+        public void OpenEnvoy(int kingdomId = 0, string kingdomName = "")
+        {
+            _dipMode = 6;
+            if (kingdomId != 0) { _dipKingdomId = kingdomId; _dipKingdomName = kingdomName ?? ""; }
+            _letterDraft = "";
+            _client.LoadLetters(false);
         }
         private void OpenTrade(WarMapRegionDto r)
         {
@@ -68,6 +80,7 @@ namespace AndijonSaltanatlar.UI
                 case 3: DrawLetterModal(); break;
                 case 4: DrawInboxModal(); break;
                 case 5: DrawTradeModal(); break;
+                case 6: DrawEnvoyModal(); break;
             }
         }
 
@@ -188,6 +201,108 @@ namespace AndijonSaltanatlar.UI
             { _client.SendLetter(_dipKingdomId, _letterDraft.Trim()); CloseDip(); }
         }
 
+        // ------------------------------------------------------------------ ELCHI
+        private void DrawEnvoyModal()
+        {
+            UiKit ui = _ui; ThemeTokens T = ui.T;
+            LettersResponse inbox = _client.Inbox;
+            string envoy = string.IsNullOrEmpty(inbox?.MyEnvoy) ? "Elchi" : inbox.MyEnvoy;
+            Rectangle m = ui.Modal(660, 600, envoy.ToUpperInvariant() + " — saltanat elchisi");
+            if (ui.IconButton(new Rectangle(m.Right - ui.ControlH - 8, m.Y + 10, ui.ControlH, ui.ControlH), "×", "Yopish")) { CloseDip(); return; }
+            int x = m.X + 20, w = m.Width - 40, y = m.Y + 62, h = ui.ControlH;
+            float lh = ui.Type.LineHeight(TextStyle.Secondary);
+
+            // Elchi qiyofasi va so'zi
+            var face = new Rectangle(x, y, 64, 72);
+            ui.Frame(face, new Color(48, 40, 30), T.Border, 1, false);
+            Texture2D tex = _assets.TryGet(SpriteKeys.UnitCitizen + AndijonSaltanatlar.Core.Graphics.CitizenArt.Merchant + "_0");
+            if (tex != null)
+            {
+                float k = Math.Min(60f / tex.Width, 68f / tex.Height) * 1.6f;
+                _sbOf().Draw(tex, new Vector2(face.Center.X, face.Bottom - 2), null, Color.White, 0f, new Vector2(tex.Width / 2f, tex.Height), Math.Min(k, 68f / tex.Height), SpriteEffects.None, 0f);
+            }
+            ui.Paragraph("\"Hazratim, maktubingizni yozing va qaysi shohga olib borishimni ayting — o'zim yetkazaman.\"",
+                new Rectangle(face.Right + 12, y + 4, w - 76, (int)(lh * 3 + 4)), TextStyle.Secondary, T.TextPrimary, 3);
+            y += face.Height + 10;
+
+            // Qayerga: saltanatlar (o'zimizdan va egasiz hududlardan boshqa)
+            ui.Text("Qayerga olib borsin?", new Vector2(x, y), TextStyle.Secondary, T.TextSecondary);
+            y += (int)lh + 4;
+            var kingdoms = (_client.War?.MapRegions ?? new List<WarMapRegionDto>())
+                .Where(r => !r.IsMine && r.OwnerKingdomId != 0).GroupBy(r => r.OwnerKingdomId)
+                .Select(g => (Id: g.Key, Name: g.First().OwnerName, Ruler: g.First().RulerName)).OrderBy(k => k.Name).ToList();
+            int cw = Math.Max(120, (w - ui.Gap * 2) / 3), col = 0;
+            foreach (var k in kingdoms.Take(9))
+            {
+                var cr = new Rectangle(x + col * (cw + ui.Gap), y, cw, h - 6);
+                string label = k.Name + (string.IsNullOrEmpty(k.Ruler) ? "" : " · " + k.Ruler);
+                if (ui.Chip(cr, label, _dipKingdomId == k.Id)) { _dipKingdomId = k.Id; _dipKingdomName = k.Name; }
+                if (++col == 3) { col = 0; y += h; }
+            }
+            if (col != 0) y += h;
+            if (kingdoms.Count == 0) { ui.Text("Xarita yuklanmoqda…", new Vector2(x, y), TextStyle.Caption, T.TextSecondary); y += (int)lh + 4; }
+            y += 4;
+
+            // Maktub
+            _letterDraft = ui.TextInput(new Rectangle(x, y, w, h), "letter", _letterDraft, "Maktub matni (masalan: Salom, savdo qilaylik)…", false,
+                () => AndroidKeyboard("letter", "Maktub", _letterDraft, false), LetterMaxLength);
+            y += h + 4;
+            ui.Type.DrawRight(_sbOf(), _letterDraft.Length + " / " + LetterMaxLength, new Vector2(x + w, y), TextStyle.Caption, T.TextSecondary);
+            bool ready = _dipKingdomId != 0 && _letterDraft.Trim().Length > 0 && !_client.Busy;
+            string go = _dipKingdomId != 0 ? "ELCHIGA TOPSHIRISH — " + _dipKingdomName : "ELCHIGA TOPSHIRISH";
+            if (ui.Button(new Rectangle(x, y + (int)lh + 6, w, h), go, ButtonKind.Primary, ready, "Elchi maktubni o'sha shohga olib boradi"))
+            { _client.SendLetter(_dipKingdomId, _letterDraft.Trim()); _letterDraft = ""; }
+            y += (int)lh + 6 + h + 12;
+
+            // Elchilar holati
+            ui.Text("Elchilaringiz:", new Vector2(x, y), TextStyle.Secondary, T.TextSecondary);
+            y += (int)lh + 4;
+            var envoys = inbox?.Envoys ?? new List<EnvoyDto>();
+            if (envoys.Count == 0) ui.Text("Hali maktub yuborilmagan.", new Vector2(x, y), TextStyle.Caption, T.TextSecondary);
+            float since = (float)(DateTime.UtcNow - _client.InboxLoadedAt).TotalSeconds;
+            foreach (EnvoyDto e in envoys)
+            {
+                if (y + lh > m.Bottom - 12) break;
+                int left = Math.Max(0, e.SecondsLeft - (int)since);
+                string st = !e.Delivered && left > 0 ? "yo'lda — " + left + " s" : e.Read ? "yetkazdi, shoh O'QIDI" : "yetkazdi";
+                ui.TextFit(e.EnvoyName + " → " + e.ToName + ": " + st + "   \"" + e.Preview + "\"", new Rectangle(x, y, w, (int)lh), TextStyle.Caption,
+                    e.Read ? T.Primary : !e.Delivered ? T.Accent : T.TextPrimary);
+                y += (int)lh + 2;
+            }
+        }
+
+        /// <summary>Xaritada yo'ldagi elchilar: kichik otliq-chopar belgisi va qolgan vaqt.</summary>
+        private void DrawEnvoysOnMap(UzMapCanvas cv, WarOverviewDto w, Func<int, Vector2> pos, float s)
+        {
+            LettersResponse inbox = _client.Inbox;
+            if (inbox?.Envoys == null) return;
+            float since = (float)(DateTime.UtcNow - _client.InboxLoadedAt).TotalSeconds;
+            bool travelling = false;
+            foreach (EnvoyDto e in inbox.Envoys)
+            {
+                float left = e.SecondsLeft - since;
+                if (e.Delivered || left <= 0f) continue;
+                travelling = true;
+                Vector2 a = pos(e.FromRegionId), b = pos(e.ToRegionId);
+                if (a.X < -9000 || b.X < -9000) continue;
+                float t = MathHelper.Clamp(1f - left / Math.Max(1, e.TotalSeconds), 0f, 1f);
+                cv.DashedLine(a, b, new Color(120, 90, 40) * 0.7f, 2, 6, 6);
+                Vector2 p = Vector2.Lerp(a, b, t) + new Vector2(0, MathF.Sin(_ui.Time * 10) * 1.5f);
+                int r = (int)(8 * s);
+                _ui.Rounded(new Rectangle((int)p.X - r - 2, (int)p.Y - r - 2, 2 * r + 4, 2 * r + 4), new Color(60, 44, 30), r + 2);
+                _ui.Rounded(new Rectangle((int)p.X - r, (int)p.Y - r, 2 * r, 2 * r), new Color(240, 226, 190), r);
+                _ui.Fill(new Rectangle((int)p.X - r / 2, (int)p.Y - r / 3, r, (int)(r * 0.7f)), new Color(200, 160, 90)); // maktub o'rami
+                _ui.Fill(new Rectangle((int)p.X - 1, (int)p.Y - r / 3, 2, (int)(r * 0.7f)), new Color(150, 40, 30));     // muhr
+                string lbl = e.EnvoyName + " · " + (int)Math.Ceiling(left) + " s";
+                Vector2 ls = _ui.Type.Measure(lbl, TextStyle.Caption);
+                var lr = new Rectangle((int)(p.X - ls.X / 2 - 6), (int)(p.Y + r + 4), (int)ls.X + 12, (int)_ui.Type.LineHeight(TextStyle.Caption) + 4);
+                _ui.Frame(lr, new Color(250, 240, 214), Ink, 1, false);
+                _ui.Type.DrawFitted(_sbOf(), lbl, lr, TextStyle.Caption, Ink, 1);
+            }
+            // Elchi yo'lda bo'lsa holat tez-tez yangilanadi (yetib bordimi, javob keldimi)
+            if (travelling && (DateTime.UtcNow - _client.InboxLoadedAt).TotalSeconds > 4) _client.LoadLetters(false);
+        }
+
         // ------------------------------------------------------------------ XATLAR QUTISI
         private void DrawInboxModal()
         {
@@ -220,7 +335,7 @@ namespace AndijonSaltanatlar.UI
                 if (r.Bottom < view.Y || r.Y > view.Bottom) continue;
                 ui.Card(r, !l.Read);
                 if (!l.Read) ui.Fill(new Rectangle(r.X + 6, r.Y + 8, 4, ch - 16), T.Accent);
-                ui.TextFit(l.FromName, new Rectangle(r.X + 16, r.Y + 8, r.Width - 150, (int)lh), TextStyle.PanelTitle, l.Read ? T.TextPrimary : T.Accent);
+                ui.TextFit(l.FromName + (string.IsNullOrEmpty(l.EnvoyName) ? "" : "  ·  " + l.EnvoyName + " olib keldi"), new Rectangle(r.X + 16, r.Y + 8, r.Width - 150, (int)lh), TextStyle.PanelTitle, l.Read ? T.TextPrimary : T.Accent);
                 ui.Type.DrawRight(_sbOf(), l.SentAt.ToLocalTime().ToString("dd.MM HH:mm"), new Vector2(r.Right - 12, r.Y + 10), TextStyle.Caption, T.TextSecondary);
                 ui.Paragraph(l.Text, new Rectangle(r.X + 16, r.Y + (int)lh + 10, r.Width - 28, ch - (int)lh - 18), TextStyle.Secondary, T.TextPrimary, 6);
             }

@@ -112,8 +112,11 @@ public sealed class Game1 : Game
 	private AndijonSaltanatlar.Combat.SiegeMode _siege;
 	private bool _siegeFromMap;
 	private bool _siegeTestPending;
+	private bool _paradeTestDone;
 	/// <summary>Qamal onlayn dunyo xaritasidan (M) boshlangan — tugagach xarita qayta ochiladi.</summary>
 	private bool _siegeOnline;
+	/// <summary>Yurish boshlanganda shahardan qo'shin chiqib ketishi (ko'rinish).</summary>
+	private readonly MarchOutParade _parade = new MarchOutParade();
 	private readonly FarmWorkController _farmWork = new FarmWorkController();
 	private readonly SwimController _swim = new SwimController();
 
@@ -259,6 +262,7 @@ public sealed class Game1 : Game
 		_perf = new Core.PerformanceMonitor();
 		_onlinePanel = new OnlinePanel(_assets, _font, _online, _uiKit);
 		_onlinePanel.LocalArmyCount = () => _state?.Military?.TotalUnits ?? 0;
+		_onlinePanel.SiegeDeparted = target => StartMarchOutParade(target.Name);
 		_renderer = new WorldRenderer(_assets, _font);
 		_glow = BuildGlow();
 		_mainMenu = new MainMenuScreen(_assets, _font) { Ui = _uiKit };
@@ -1229,6 +1233,19 @@ public sealed class Game1 : Game
 		LoadCloudGame();
 	}
 
+	/// <summary>Yurish boshlandi: xarita yopiladi, kamera qo'shinxonaga — jangchilar qismlar bo'yicha chiqib, darvozadan ketadi.</summary>
+	private void StartMarchOutParade(string targetName)
+	{
+		if (_map == null || _buildings == null || _units == null) return;
+		if (_onlinePanel.IsOpen) _onlinePanel.Close();
+		_strategicMode = _civMode = _questMode = false;
+		if (_interior != null && _interior.Active) _interior.Exit();
+		if (_combat != null && _combat.Possessed != null) _combat.Release(false);
+		Vector2? at = _parade.Start(_map, _buildings, _units, _state.Military, targetName);
+		if (at.HasValue) _camera.Jump(IsoMath.TileToWorld(at.Value) + new Vector2(0f, -20f), Math.Max(1.6f, _camera.Zoom));
+		_state.ShowMessage(_parade.Active ? _parade.Summary : "Qo'shin " + targetName + " tomon yo'lga chiqdi");
+	}
+
 	/// <summary>Shoh qiyofasi o'zgardi: shaharda yurgan shoh figurasiga darhol qo'llanadi.</summary>
 	private void RefreshShahLook()
 	{
@@ -1598,17 +1615,27 @@ public sealed class Game1 : Game
 		{
 			_onlinePanel.ToggleWorldMap();   // M — xaritani yopish
 		}
+		if (_opt.MarchOut != null && !_paradeTestDone && !_loginMode && !_menuMode && !_introMode && _state.Military != null)
+		{
+			_paradeTestDone = true;
+			if (_opt.TestArmy.HasValue)
+			{
+				var pt = new[] { AndijonSaltanatlar.Military.UnitType.Otliq, AndijonSaltanatlar.Military.UnitType.Qilichboz, AndijonSaltanatlar.Military.UnitType.Nayzador, AndijonSaltanatlar.Military.UnitType.Kamonchi };
+				for (int i = 0; i < _opt.TestArmy.Value; i++) _state.Military.Recruit(pt[i % pt.Length], 1, 1);
+			}
+			StartMarchOutParade(_opt.MarchOut);
+		}
 		if (_siegeTestPending && _siege != null && !_siege.Active && !_loginMode && !_menuMode && !_introMode)
 		{
 			_siegeTestPending = false;
 			if (_opt.TestArmy.HasValue)
 			{
-				var types = new[] { AndijonSaltanatlar.Military.UnitType.Qilichboz, AndijonSaltanatlar.Military.UnitType.Nayzador, AndijonSaltanatlar.Military.UnitType.Otliq, AndijonSaltanatlar.Military.UnitType.Qalqonchi, AndijonSaltanatlar.Military.UnitType.Piyoda };
+				var types = new[] { AndijonSaltanatlar.Military.UnitType.Qilichboz, AndijonSaltanatlar.Military.UnitType.Nayzador, AndijonSaltanatlar.Military.UnitType.Otliq, AndijonSaltanatlar.Military.UnitType.Qalqonchi, AndijonSaltanatlar.Military.UnitType.Kamonchi };
 				for (int i = 0; i < _opt.TestArmy.Value; i++) _state.Military.Recruit(types[i % types.Length], 1, 2);
 			}
 			if (_siege.Start(_opt.SiegeRegion.Value, GraphicsDevice.Viewport))
 			{
-				if (_opt.SiegeWatch) _siege.Combat.Release(false);
+				if (_opt.SiegeWatch) _siege.SendAll();
 				_siegeFromMap = true;
 				_strategicMode = false;
 				if (_opt.SiegeShahDown) _siege.TestKillShah();
@@ -1921,6 +1948,13 @@ public sealed class Game1 : Game
 		_birds?.Update(dt, _dayNight.NightAmount, _combat.Possessed);
 		_livestock?.Update(dt);
 		_carts?.Update(dt, _map, _buildings, _state);
+		if (_parade.Active)
+		{
+			_parade.Update(num);
+			if (_input.IsPanDragging || _input.KeyDown(Keys.W) || _input.KeyDown(Keys.A) || _input.KeyDown(Keys.S) || _input.KeyDown(Keys.D)) _parade.CameraReleased = true;
+			if (!_parade.CameraReleased && _combat.Possessed == null && _parade.Focus(out Vector2 pf))
+				_camera.Follow(IsoMath.TileToWorld(pf) + new Vector2(0f, -20f), num, 3f);
+		}
 		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
 		_citizenSocial.Update(_units, dt);
 		_citizenLife?.Update(dt, _map, _buildings, _units, _state, _combat.Possessed);
@@ -2654,6 +2688,7 @@ public sealed class Game1 : Game
 		_sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 		LegacyUiSize(out float hudScale);
 		_combat?.DrawHud(_sb, _assets.Pixel, _font, _camera, viewport.Width, viewport.Height, Math.Max(1, (int)Math.Round(hudScale)));
+		_parade.DrawHud(_sb, _assets.Pixel, _font, _camera, viewport.Width, viewport.Height, Math.Max(1, (int)Math.Round(hudScale)));
 		_interior?.DrawPrompt(_sb, _assets.Pixel, _font, _camera, viewport.Width, viewport.Height);
 		_livestock?.DrawHerdInfo(_sb, _assets.Pixel, _font, _combat?.Possessed ?? (_state.Selected as Unit), viewport.Width);
 		_sb.End();

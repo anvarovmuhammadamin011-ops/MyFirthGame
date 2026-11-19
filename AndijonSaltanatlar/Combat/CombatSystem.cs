@@ -197,6 +197,10 @@ namespace AndijonSaltanatlar.Combat
         /// <summary>Hujumchilar dushman yo'q paytda shu nuqtaga (shoh / saroy eshigi) yuradi.</summary>
         public Vector2 SiegeObjective { get; set; }
         private float _siegeThink;
+        /// <summary>Qamal: himoyachilar hushyor (birinchi qism hujumga yuborilgach). Saf tortish paytida jim turadi.</summary>
+        public bool SiegeAlert { get; set; }
+        private struct Arrow { public Vector2 From, To; public float T; }
+        private readonly List<Arrow> _arrows = new List<Arrow>();
         private const float SiegeAttackerAggro = 9f;
         private const float SiegeDefenderAggro = 9f;
 
@@ -232,6 +236,7 @@ namespace AndijonSaltanatlar.Combat
         /// <summary>Qamal: dushman askari hujumchini yaqin masofada sezsa jangga kiradi (aks holda o'z postida/patrulida).</summary>
         private void UpdateSiegeAwareness(float dt)
         {
+            if (!SiegeAlert) return;
             _siegeThink -= dt;
             if (_siegeThink > 0f) return;
             _siegeThink = 0.35f;
@@ -263,6 +268,7 @@ namespace AndijonSaltanatlar.Combat
                 a.Target = NearestEnemy(u, SiegeAttackerAggro);
             }
             float speed = u is CavalryUnit ? 2.7f : DefenderSpeed;
+            if (a.Target == null && u.IsArcher) a.Target = NearestEnemy(u, u.AttackRange + 2.5f);
             if (a.Target != null) { ChaseAndStrike(a, a.Target, speed, dt); return; }
             Vector2 goal = SiegeObjective + a.EscortOffset;
             if (!Walk(goal)) goal = SiegeObjective;
@@ -668,6 +674,12 @@ namespace AndijonSaltanatlar.Combat
             // Zarba tekkan lahza: dunyo bir zumga deyarli to'xtaydi
             if (_hitStop > 0f && dt > 0f) { _hitStop -= dt; dt *= TimeScale; }
             UpdateParticles(dt);
+            for (int i = _arrows.Count - 1; i >= 0; i--)
+            {
+                Arrow ar = _arrows[i];
+                ar.T += dt / 0.28f;
+                if (ar.T >= 1f) _arrows.RemoveAt(i); else _arrows[i] = ar;
+            }
 
             UpdatePossessed(dt, input, camera);
             if (dt <= 0f) return;
@@ -916,6 +928,7 @@ namespace AndijonSaltanatlar.Combat
                     u.AttackTimer = Unit.SwingTime;
                     u.AttackCooldown = 1.0f + (float)_rng.NextDouble() * 0.35f;
                     int dmg = Math.Max(2, u.Attack + _rng.Next(-2, 3));
+                    if (u.IsArcher) _arrows.Add(new Arrow { From = u.Position, To = target.Position });
                     ScheduleHit(u, target, dmg, u.AttackKind, 0.12f, u.AttackRange, 0);
                 }
                 return;
@@ -1319,6 +1332,20 @@ namespace AndijonSaltanatlar.Combat
             // --- Zarba raqamlari ---
             // --- Uchqun, chang va zarba halqalari ---
             DrawParticles(sb, px, cam);
+
+            // --- Kamon o'qlari (yoysimon uchadi) ---
+            foreach (Arrow ar in _arrows)
+            {
+                Vector2 a0 = cam.WorldToScreen(IsoMath.TileToWorld(ar.From) + new Vector2(0, -24));
+                Vector2 a1 = cam.WorldToScreen(IsoMath.TileToWorld(ar.To) + new Vector2(0, -20));
+                float hgt = Vector2.Distance(a0, a1) * 0.25f;
+                Vector2 Pt(float t) => Vector2.Lerp(a0, a1, t) + new Vector2(0, -4f * hgt * t * (1f - t));
+                Vector2 head = Pt(ar.T), tail = Pt(Math.Max(0f, ar.T - 0.12f));
+                Vector2 d = head - tail;
+                float len = Math.Max(2f, d.Length());
+                sb.Draw(px, tail, null, new Color(60, 40, 24), MathF.Atan2(d.Y, d.X), new Vector2(0f, 0.5f), new Vector2(len, Math.Max(1f, cam.Zoom)), SpriteEffects.None, 0f);
+                sb.Draw(px, new Rectangle((int)head.X - 1, (int)head.Y - 1, 3, 3), new Color(220, 220, 230));
+            }
 
             foreach (FloatText f in _floats)
             {

@@ -319,12 +319,15 @@ namespace AndijonSaltanatlar.UI
             int inboxW = (int)ui.Type.Measure("Xatlar (00)", TextStyle.Button).X + 28;
             var inboxBtn = new Rectangle(vw - pad - h - 8 - inboxW, pad, inboxW, h);
             if (ui.Button(inboxBtn, "Xatlar" + (unread > 0 ? " (" + unread + ")" : ""), unread > 0 ? ButtonKind.Accent : ButtonKind.Secondary))
-            { _dipMode = 4; _client.LoadLetters(); }
+            { _dipMode = 4; _client.LoadLetters(true); }
             int uc = _client.UnreadChat;
             int chatW = (int)ui.Type.Measure("Chat (00)", TextStyle.Button).X + 28;
             var chatBtn = new Rectangle(inboxBtn.X - 8 - chatW, pad, chatW, h);
             if (ui.Button(chatBtn, "Chat" + (uc > 0 ? " (" + uc + ")" : ""), uc > 0 ? ButtonKind.Accent : ButtonKind.Secondary)) OpenChat();
-            ui.TextFit(hint, new Rectangle(pad + 330, pad + 6, chatBtn.X - (pad + 330) - 12, (int)ui.Type.LineHeight(TextStyle.Secondary)), TextStyle.Secondary, T.TextSecondary);
+            int envW = (int)ui.Type.Measure("Elchi", TextStyle.Button).X + 28;
+            var envBtn = new Rectangle(chatBtn.X - 8 - envW, pad, envW, h);
+            if (ui.Button(envBtn, "Elchi", ButtonKind.Primary, true, "Elchiga maktub berib, boshqa shohga yuborish")) OpenEnvoy();
+            ui.TextFit(hint, new Rectangle(pad + 330, pad + 6, envBtn.X - (pad + 330) - 12, (int)ui.Type.LineHeight(TextStyle.Secondary)), TextStyle.Secondary, T.TextSecondary);
             if (ui.IconButton(new Rectangle(vw - pad - h, pad, h, h), "×", "Yopish (M)")) { Close(); return; }
             var body = new Rectangle(pad, pad + headH, vw - 2 * pad, vh - 2 * pad - headH);
             WarOverviewDto w = _client.War;

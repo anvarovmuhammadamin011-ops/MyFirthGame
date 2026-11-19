@@ -201,8 +201,15 @@ namespace AndijonSaltanatlar.Tests
             Assert.NotNull(await _svc.SendLetterAsync(ka, new LetterRequest { ToKingdomId = kb.Id, Text = "sen ahmoq" }));          // filtr
             Assert.Null(await _svc.SendLetterAsync(ka, new LetterRequest { ToKingdomId = kb.Id, Text = "Salom, savdo qilaylikmi?" }));
 
+            // Elchi hali yo'lda — qabul qiluvchi maktubni ko'rmaydi, jo'natuvchi esa elchisini kuzatadi
+            LettersResponse early = await _svc.LettersAsync(kb);
+            Assert.DoesNotContain(early.Letters, l => l.Text.Contains("savdo"));
+            LettersResponse mine = await _svc.LettersAsync(ka);
+            Assert.Contains(mine.Envoys, e => !e.Delivered && e.SecondsLeft > 0 && e.EnvoyName.StartsWith("Elchi"));
+            // Elchi yetib bordi
+            using (var db = NewDb()) await db.Letters.ExecuteUpdateAsync(s => s.SetProperty(l => l.DeliverAt, System.DateTime.UtcNow.AddSeconds(-1)));
             LettersResponse inbox = await _svc.LettersAsync(kb);
-            Assert.Contains(inbox.Letters, l => l.Text.Contains("savdo"));
+            Assert.Contains(inbox.Letters, l => l.Text.Contains("savdo") && l.EnvoyName.StartsWith("Elchi"));
             Assert.Equal(1, inbox.Unread);
             // Ikkinchi o'qishda o'qilgan deb belgilangan.
             LettersResponse again = await _svc.LettersAsync(kb);

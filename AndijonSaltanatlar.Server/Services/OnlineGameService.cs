@@ -388,21 +388,103 @@ namespace AndijonSaltanatlar.Server.Services
             DateTime dayStart = _clock.UtcNow.Date;
             int todayCount = await _db.Letters.CountAsync(l => l.FromKingdomId == me.Id && l.SentAt >= dayStart);
             if (todayCount >= LetterDailyLimit) return "Bugungi xat limiti tugadi (" + LetterDailyLimit + " ta).";
-            _db.Letters.Add(new PlayerLetterEntity { WorldId = me.WorldId, FromKingdomId = me.Id, ToKingdomId = to.Id, FromName = me.Name, Text = text, SentAt = _clock.UtcNow, Read = false });
+            var (fromRegion, toRegion, seconds) = await EnvoyRouteAsync(me.Id, to.Id);
+            _db.Letters.Add(new PlayerLetterEntity
+            {
+                WorldId = me.WorldId, FromKingdomId = me.Id, ToKingdomId = to.Id, FromName = me.Name, ToName = to.Name, Text = text,
+                SentAt = _clock.UtcNow, Read = false, DeliverAt = _clock.UtcNow.AddSeconds(seconds),
+                FromRegionId = fromRegion, ToRegionId = toRegion, EnvoyName = EnvoyNameOf(me.Id)
+            });
             await _db.SaveChangesAsync();
             return null;
         }
 
-        /// <summary>Kelgan xatlar qutisi (eng yangi 50 ta); ko'rilgach o'qilgan deb belgilanadi.</summary>
-        public async Task<LettersResponse> LettersAsync(Kingdom me)
+        // ==================================================================
+        // ELCHI: har saltanatning (shohning) elchisi maktubni poytaxtdan poytaxtga olib boradi
+        // ==================================================================
+        private static readonly string[] EnvoyNames = { "Bahodir", "Qosim", "Sodiq", "Rustam", "Farhod", "Komil", "Jo'ra", "Nodir", "Sherzod", "Anvar" };
+
+        public static string EnvoyNameOf(int kingdomId) => "Elchi " + EnvoyNames[Math.Abs(kingdomId) % EnvoyNames.Length];
+
+        /// <summary>Elchi yo'li: jo'natuvchi poytaxti → qabul qiluvchi poytaxti; vaqt — qo'shin yurishidan tezroq (otliq elchi).</summary>
+        private async Task<(int From, int To, int Seconds)> EnvoyRouteAsync(int fromKingdom, int toKingdom)
         {
-            var letters = await _db.Letters.AsNoTracking().Where(l => l.ToKingdomId == me.Id)
+            RegionEntity a = await CapitalRegionAsync(fromKingdom), b = await CapitalRegionAsync(toKingdom);
+            if (a == null || b == null) return (a?.Id ?? 0, b?.Id ?? 0, 10);
+            int s = AndijonSaltanatlar.Shared.War.WarRules.MarchSeconds(a.Latitude, a.Longitude, b.Latitude, b.Longitude);
+            return (a.Id, b.Id, Math.Clamp((int)(s * 0.6f), 8, 120));
+        }
+
+        private async Task<RegionEntity> CapitalRegionAsync(int kingdomId)
+        {
+            int rid = await _db.Cities.Where(c => c.KingdomId == kingdomId && c.IsCapital).Select(c => c.RegionId).FirstOrDefaultAsync();
+            RegionEntity r = rid != 0 ? await _db.Regions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == rid && x.OwnerKingdomId == kingdomId) : null;
+            return r ?? await _db.Regions.AsNoTracking().Where(x => x.OwnerKingdomId == kingdomId).OrderBy(x => x.Id).FirstOrDefaultAsync();
+        }
+
+        /// <summary>AI shoh maktubni o'qiydi va o'z elchisi bilan javob yuboradi (mazmuniga qarab).</summary>
+        private async Task AiReadLettersAsync(Kingdom me)
+        {
+            DateTime now = _clock.UtcNow;
+            var due = await _db.Letters.Where(l => l.FromKingdomId == me.Id && !l.Read && l.DeliverAt <= now).ToListAsync();
+            if (due.Count == 0) return;
+            var aiIds = await _db.Kingdoms.AsNoTracking().Where(k => k.IsAi).Select(k => k.Id).ToListAsync();
+            foreach (PlayerLetterEntity l in due)
+            {
+                if (!aiIds.Contains(l.ToKingdomId)) continue;
+                Kingdom ai = await _db.Kingdoms.AsNoTracking().FirstAsync(k => k.Id == l.ToKingdomId);
+                l.Read = true;
+                var (fromRegion, toRegion, seconds) = await EnvoyRouteAsync(ai.Id, me.Id);
+                string ruler = string.IsNullOrWhiteSpace(ai.RulerName) ? ai.Name + " hukmdori" : ai.RulerName;
+                _db.Letters.Add(new PlayerLetterEntity
+                {
+                    WorldId = me.WorldId, FromKingdomId = ai.Id, ToKingdomId = me.Id, FromName = ai.Name + " · shoh " + ruler, ToName = me.Name,
+                    Text = AiReplyText(l.Text, ruler), SentAt = now, Read = false, DeliverAt = now.AddSeconds(seconds),
+                    FromRegionId = fromRegion, ToRegionId = toRegion, EnvoyName = EnvoyNameOf(ai.Id)
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public static string AiReplyText(string text, string ruler)
+        {
+            string t = (text ?? "").ToLowerInvariant();
+            bool Has(params string[] w) => w.Any(x => t.Contains(x));
+            if (Has("urush", "jang", "taslim", "bosib", "yo'q qil", "hujum"))
+                return "Maktubingizni o'qidim. Tahdidingizdan qo'rqmaymiz — qasrlarimiz mustahkam, askarlarimiz tayyor! — " + ruler;
+            if (Has("tinch", "sulh", "do'st", "ittifoq"))
+                return "Tinchlik so'zingiz menga ma'qul. Biz ham urush istamaymiz — elchilarimiz bordi-keldi qilib tursin. — " + ruler;
+            if (Has("savdo", "karvon", "bozor", "tovar"))
+                return "Savdo taklifingizni o'qidim. Karvonlaringizga yo'limiz ochiq, adolatli narx bilan savdo qilamiz. — " + ruler;
+            if (Has("sovg'a", "hadya"))
+                return "Hadyangiz va maktubingiz uchun minnatdormiz. Do'stligimiz mustahkam bo'lsin. — " + ruler;
+            return "Maktubingizni o'qidim. Elchingizni hurmat bilan kutib oldik. Saltanatingizga salom yo'llaymiz. — " + ruler;
+        }
+
+        /// <summary>Kelgan xatlar qutisi (eng yangi 50 ta); ko'rilgach o'qilgan deb belgilanadi.</summary>
+        public async Task<LettersResponse> LettersAsync(Kingdom me, bool markRead = true)
+        {
+            await AiReadLettersAsync(me);
+            DateTime now = _clock.UtcNow;
+            // Faqat elchi yetkazgan maktublar ko'rinadi
+            var letters = await _db.Letters.AsNoTracking().Where(l => l.ToKingdomId == me.Id && l.DeliverAt <= now)
                 .OrderByDescending(l => l.SentAt).Take(50).ToListAsync();
-            var resp = new LettersResponse { Unread = letters.Count(l => !l.Read) };
+            var resp = new LettersResponse { Unread = letters.Count(l => !l.Read), MyEnvoy = EnvoyNameOf(me.Id) };
             foreach (var l in letters)
-                resp.Letters.Add(new LetterDto { Id = l.Id, FromName = l.FromName, Text = l.Text, SentAt = l.SentAt, Read = l.Read });
+                resp.Letters.Add(new LetterDto { Id = l.Id, FromName = l.FromName, Text = l.Text, SentAt = l.SentAt, Read = l.Read, EnvoyName = l.EnvoyName ?? "" });
+            foreach (var l in await _db.Letters.AsNoTracking().Where(l => l.FromKingdomId == me.Id).OrderByDescending(l => l.SentAt).Take(8).ToListAsync())
+            {
+                int total = Math.Max(1, (int)(l.DeliverAt - l.SentAt).TotalSeconds);
+                resp.Envoys.Add(new EnvoyDto
+                {
+                    LetterId = l.Id, EnvoyName = string.IsNullOrEmpty(l.EnvoyName) ? EnvoyNameOf(me.Id) : l.EnvoyName, ToName = l.ToName ?? "",
+                    FromRegionId = l.FromRegionId, ToRegionId = l.ToRegionId, TotalSeconds = total,
+                    SecondsLeft = Math.Max(0, (int)Math.Ceiling((l.DeliverAt - now).TotalSeconds)), Delivered = l.DeliverAt <= now, Read = l.Read,
+                    Preview = l.Text.Length > 40 ? l.Text.Substring(0, 40) + "…" : l.Text
+                });
+            }
             var unreadIds = letters.Where(l => !l.Read).Select(l => l.Id).ToList();
-            if (unreadIds.Count > 0)
+            if (markRead && unreadIds.Count > 0)
                 await _db.Letters.Where(l => unreadIds.Contains(l.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.Read, true));
             return resp;
         }

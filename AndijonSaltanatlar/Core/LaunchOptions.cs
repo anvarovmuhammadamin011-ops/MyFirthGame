@@ -106,6 +106,9 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: qamalda dushman shohi darhol yiqiladi (askarlar tomonga o'tadi).</summary>
 	public bool SiegeShahDown;
 
+	/// <summary>Sinov: shahardan qo'shin chiqib ketishi (nishon nomi).</summary>
+	public string MarchOut;
+
 	/// <summary>Sinov: qamalda birinchi jangchi bilan darhol saroy ichiga kiriladi.</summary>
 	public bool SiegePalace;
 
@@ -331,6 +334,10 @@ public sealed class LaunchOptions
 				break;
 			case "--siege":
 				launchOptions.SiegeRegion = int.Parse(text, CultureInfo.InvariantCulture);
+				i++;
+				break;
+			case "--march-out":
+				launchOptions.MarchOut = text;
 				i++;
 				break;
 			case "--siege-palace":

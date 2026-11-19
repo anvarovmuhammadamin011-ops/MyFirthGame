@@ -124,12 +124,33 @@ namespace AndijonSaltanatlar.Shared.DTOs
         public string Text { get; set; } = "";
         public System.DateTime SentAt { get; set; }
         public bool Read { get; set; }
+        /// <summary>Maktubni olib kelgan elchi.</summary>
+        public string EnvoyName { get; set; } = "";
+    }
+
+    /// <summary>O'yinchining elchisi: maktubni qayerga olib ketyapti, yetib bordimi, shoh o'qidimi.</summary>
+    public sealed class EnvoyDto
+    {
+        public int LetterId { get; set; }
+        public string EnvoyName { get; set; } = "";
+        public string ToName { get; set; } = "";
+        public int FromRegionId { get; set; }
+        public int ToRegionId { get; set; }
+        public int SecondsLeft { get; set; }
+        public int TotalSeconds { get; set; }
+        public bool Delivered { get; set; }
+        public bool Read { get; set; }
+        public string Preview { get; set; } = "";
     }
 
     public sealed class LettersResponse
     {
         public System.Collections.Generic.List<LetterDto> Letters { get; set; } = new System.Collections.Generic.List<LetterDto>();
         public int Unread { get; set; }
+        /// <summary>Mening elchilarim (yo'ldagi va yaqinda yetkazganlar).</summary>
+        public System.Collections.Generic.List<EnvoyDto> Envoys { get; set; } = new System.Collections.Generic.List<EnvoyDto>();
+        /// <summary>Saltanatimiz elchisining ismi.</summary>
+        public string MyEnvoy { get; set; } = "";
     }
 
     /// <summary>Dunyo umumiy chati xabari (real vaqtda SignalR orqali).</summary>

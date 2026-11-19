@@ -29,6 +29,8 @@ namespace AndijonSaltanatlar.UI
         /// <summary>Qo'shin qasrga yetib keldi — Game1 qamalni boshlaydi va buni null qiladi.</summary>
         public WarMapRegionDto SiegeArrived { get; set; }
         public bool SiegeMarching => _siegeTarget != null;
+        /// <summary>Yurish boshlandi — Game1 shaharda qo'shin chiqib ketishini ko'rsatadi.</summary>
+        public Action<WarMapRegionDto> SiegeDeparted;
         private WarMapRegionDto _siegeTarget;
         private int _siegeHome = -1;
         private int[] _siegeColor = { 70, 130, 220 };
@@ -58,6 +60,7 @@ namespace AndijonSaltanatlar.UI
                 _siegeFlag = home?.Flag ?? "";
                 _siegeTotal = Math.Max(5, target.MarchSeconds);
                 _siegeArrive = DateTime.UtcNow.AddSeconds(_siegeTotal);
+                SiegeDeparted?.Invoke(target);
             });
         }
         private readonly List<MapCell> _cellBuf = new List<MapCell>();
@@ -136,6 +139,8 @@ namespace AndijonSaltanatlar.UI
                 ui.Frame(lr, m.TargetIsMine ? new Color(150, 40, 30) : new Color(236, 220, 180), Ink, 1, false);
                 ui.Type.DrawFitted(_sbOf(), lbl, lr, TextStyle.Caption, m.TargetIsMine ? new Color(250, 236, 210) : Ink, 1);
             }
+
+            DrawEnvoysOnMap(cv, w, Pos, s);
 
             // Qamalga ketayotgan o'z qo'shinimiz (shahardagi jangchilar)
             if (_siegeTarget != null)

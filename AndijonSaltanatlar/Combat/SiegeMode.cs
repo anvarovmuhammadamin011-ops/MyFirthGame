@@ -28,7 +28,23 @@ namespace AndijonSaltanatlar.Combat
     /// </summary>
     public sealed class SiegeMode
     {
-        private enum Phase { Assault, Captured, Defeated }
+        private enum Phase { Deploy, Assault, Captured, Defeated }
+
+        // --- SAF: qo'shin darvoza oldida qismlarga bo'linib turadi, o'yinchi qaysi qism birinchi borishini tanlaydi ---
+        private static readonly (string Key, string Label)[] GroupDefs =
+            { ("otliq", "OTLIQLAR"), ("piyoda", "PIYODALAR"), ("nayza", "NAYZACHILAR"), ("kamon", "KAMONCHILAR") };
+        private readonly Dictionary<string, List<Unit>> _groups = new Dictionary<string, List<Unit>>();
+        private readonly HashSet<string> _sent = new HashSet<string>();
+        private readonly List<(Rectangle Rect, string Key)> _groupButtons = new List<(Rectangle, string)>();
+        private Vector2 _formationCenter;
+
+        private static string GroupOf(UnitType t) => t switch
+        {
+            UnitType.Otliq or UnitType.ElitaOtliq => "otliq",
+            UnitType.Kamonchi => "kamon",
+            UnitType.Nayzador or UnitType.SaroyQoriqchisi => "nayza",
+            _ => "piyoda"
+        };
 
         /// <summary>Qamal nishoni (mahalliy saltanat xaritasidan yoki onlayn dunyo xaritasidan).</summary>
         private sealed class Target
@@ -153,7 +169,9 @@ namespace AndijonSaltanatlar.Combat
             SetupRoster();
             SetupAttackers(mil);
 
-            _phase = Phase.Assault;
+            _phase = Phase.Deploy;
+            _sent.Clear();
+            _combat.SiegeAlert = false;
             _endTimer = 0f;
             _time = 0f;
             _lastPossessed = null;
@@ -161,12 +179,11 @@ namespace AndijonSaltanatlar.Combat
             _wasInside = false;
             _combat.SiegeObjective = _palaceDoor;
 
-            Vector2 start = _attackers.Count > 0 ? _attackers[0].Position : _palaceDoor;
-            _camera = new CameraManager(viewport, IsoMath.TileToWorld(start) + new Vector2(0, -20), 2.0f);
-            if (_attackers.Count > 0) _combat.TryPossess(_attackers[0]);
+            _camera = new CameraManager(viewport, IsoMath.TileToWorld(_formationCenter) + new Vector2(0, -60), 1.6f);
+            _manualCam = 0f;
             Active = true;
-            ShowBanner("QAMAL: " + t.RegionName.ToUpperInvariant() + "!  Saroyga kirib shoh " + t.RulerName + " va vazirni yenging", 5f);
-            _state.ShowMessage("Qo'shiningiz " + t.FoeName + " qasri darvozasiga yetib keldi! Saroyga boring.");
+            ShowBanner("QAMAL: " + t.RegionName.ToUpperInvariant() + "!  Qo'shin darvoza oldida saf tortdi", 5f);
+            _state.ShowMessage("Qaysi qism birinchi hujumga borsin? Pastdagi tugmalar yoki 1-4, hammasi — 5");
             return true;
         }
 
@@ -209,20 +226,67 @@ namespace AndijonSaltanatlar.Combat
             _attackers.Clear();
             _defectors.Clear();
             // Qo'shindan eng kuchli 24 tagacha jangchi sahnaga chiqadi (qolganlari zaxirada)
+            _groups.Clear();
             var chosen = mil.Units.OrderByDescending(u => u.Strength).Take(24).ToList();
             int O = GameConfig.CityOffset;
-            for (int i = 0; i < chosen.Count; i++)
+            // Qismlar: otliqlar, piyodalar, nayzachilar, kamonchilar — har biri darvoza oldida alohida saf (blok)
+            var byGroup = GroupDefs.Select(g => (g.Key, Units: chosen.Where(c => GroupOf(c.UnitType) == g.Key).ToList())).Where(g => g.Units.Count > 0).ToList();
+            // Darvozadan janubga ketgan yo'l bo'ylab: birinchi qism oldinda, qolganlari ortida (har qism — 3 qatorli blok)
+            const int Cols = 3;
+            const float Step = 0.9f, BlockGap = 1.3f;
+            float frontY = O + 56.5f, y = frontY;
+            var used = new HashSet<Point>();
+            foreach (var g in byGroup)
             {
-                // Bosh (janubiy) darvoza tashqarisida, ko'prik va yo'l bo'ylab ikki qator saf
-                int col = i % 2, row = i / 2;
-                var pos = NearestOpen(new Vector2(O + 31.5f + col, O + 55.5f + row * 0.85f));
-                Unit u = Create(chosen[i].UnitType, pos);
-                u.Team = UnitTeam.Player;
-                u.SetFacing(new Vector2(0, -1));
-                _units.Add(u);
-                _attackers.Add(u);
-                _combat.EnlistAttacker(u);
+                var list = new List<Unit>();
+                for (int i = 0; i < g.Units.Count; i++)
+                {
+                    var want = new Vector2(O + 31.1f + (i % Cols) * Step, y + (i / Cols) * Step);
+                    Vector2 pos = NearestFree(want, used);
+                    Unit u = Create(g.Units[i].UnitType, pos);
+                    if (g.Key == "kamon") u.MakeArcher();
+                    u.Team = UnitTeam.Player;
+                    u.ExternallyControlled = true; // buyruq kutib saf turadi
+                    u.SetFacing(new Vector2(0, -1));
+                    _units.Add(u);
+                    _attackers.Add(u);
+                    list.Add(u);
+                }
+                _groups[g.Key] = list;
+                y += ((g.Units.Count + Cols - 1) / Cols) * Step + BlockGap;
             }
+            float midY = (frontY + y) / 2f;
+            _formationCenter = new Vector2(O + 32f, midY);
+        }
+
+        private Vector2 NearestFree(Vector2 want, HashSet<Point> used)
+        {
+            Vector2 p = NearestOpen(want);
+            for (int tries = 0; tries < 30; tries++)
+            {
+                var key = new Point((int)MathF.Round(p.X * 2f), (int)MathF.Round(p.Y * 2f));
+                if (used.Add(key)) return p;
+                p = NearestOpen(want + new Vector2((tries % 5 - 2) * 0.5f, 0.5f + tries / 5 * 0.5f));
+            }
+            return p;
+        }
+
+        /// <summary>Qismni hujumga yuboradi (birinchi buyruq — himoyachilar ham hushyor bo'ladi).</summary>
+        public void SendGroup(string key)
+        {
+            if (!_groups.TryGetValue(key, out List<Unit> list) || _sent.Contains(key)) return;
+            _sent.Add(key);
+            foreach (Unit u in list) if (!u.IsDown) _combat.EnlistAttacker(u);
+            _combat.SiegeAlert = true;
+            if (_phase == Phase.Deploy) _phase = Phase.Assault;
+            string label = GroupDefs.First(g => g.Key == key).Label;
+            ShowBanner(label + " HUJUMGA!", 2.5f);
+        }
+
+        public void SendAll()
+        {
+            foreach (var g in GroupDefs) SendGroup(g.Key);
+            ShowBanner("BUTUN QO'SHIN HUJUMGA!", 2.5f);
         }
 
         private Vector2 NearestOpen(Vector2 p)
@@ -256,6 +320,7 @@ namespace AndijonSaltanatlar.Combat
         private static UnitType TypeOf(Unit u) => u switch
         {
             CavalryUnit _ => UnitType.Otliq,
+            Unit a when a.IsArcher => UnitType.Kamonchi,
             SpearmanUnit _ => UnitType.Nayzador,
             GuardUnit _ => UnitType.Qalqonchi,
             SwordsmanUnit _ => UnitType.Qilichboz,
@@ -274,12 +339,12 @@ namespace AndijonSaltanatlar.Combat
 
             bool inside = _interior.Active;
             if (inside) _interior.Update(dt, input);
-            else if (input != null && _phase == Phase.Assault) HandleInput(input);
+            else if (input != null && _phase < Phase.Captured) HandleInput(input);
             if (_wasInside && !_interior.Active) LeftPalace();
             _wasInside = _interior.Active;
 
             _combat.SiegeObjective = _palaceDoor;
-            _combat.Update(dt, _phase == Phase.Assault && !_interior.Active ? input : null, _camera);
+            _combat.Update(dt, _phase < Phase.Captured && !_interior.Active ? input : null, _camera);
 
             float wdt = dt * _combat.TimeScale;
             _units.Update(wdt);
@@ -315,6 +380,22 @@ namespace AndijonSaltanatlar.Combat
 
         private void HandleInput(InputManager input)
         {
+            // Qismlarni hujumga yuborish: tugmalar (sichqoncha) yoki 1-4, 5 — hammasi
+            bool overPanel = false;
+            foreach (var b in _groupButtons)
+            {
+                if (!b.Rect.Contains(input.MouseVector.ToPoint())) continue;
+                overPanel = true;
+                if (input.LeftPressed) { if (b.Key == "all") SendAll(); else SendGroup(b.Key); }
+            }
+            if (overPanel) input.MouseOverUI = true;
+            Keys[] num = { Keys.D1, Keys.D2, Keys.D3, Keys.D4 };
+            var present = GroupDefs.Where(g => _groups.ContainsKey(g.Key)).ToList();
+            for (int i = 0; i < present.Count && i < num.Length; i++)
+                if (input.KeyPressed(num[i]) || input.KeyPressed(Keys.NumPad1 + i)) SendGroup(present[i].Key);
+            if (input.KeyPressed(Keys.D5) || input.KeyPressed(Keys.NumPad5)) SendAll();
+            if (overPanel) return;
+
             if (_combat.Possessed != null) return;
             if (input.KeyPressed(Keys.Escape)) { Retreat(); return; }
             if (input.LeftPressed && !input.MouseOverUI)
@@ -348,6 +429,7 @@ namespace AndijonSaltanatlar.Combat
         {
             switch (_phase)
             {
+                case Phase.Deploy:
                 case Phase.Assault:
                     if (_interior.Active) break;
                     if (AliveAttackers == 0) { Lose("Qo'shiningiz yengildi..."); break; }
@@ -534,7 +616,7 @@ namespace AndijonSaltanatlar.Combat
             Vector4 view = _camera.VisibleWorldRect;
             sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, _camera.Transform);
             _map.Draw(sb, view);
-            if (_phase == Phase.Assault)
+            if (_phase < Phase.Captured)
             {
                 // Saroy eshigi — maqsad (miltillovchi oltin halqa)
                 float pulse = 0.55f + 0.12f * MathF.Sin(_time * 5f);
@@ -553,11 +635,66 @@ namespace AndijonSaltanatlar.Combat
             sb.End();
         }
 
+        /// <summary>Pastdagi buyruq paneli: har qism tugmasi (soni bilan) va "HAMMASI". Yuborilganlar — "JANGDA".</summary>
+        private void DrawDeployPanel(SpriteBatch sb, int vw, int vh, int k)
+        {
+            _groupButtons.Clear();
+            if (_phase >= Phase.Captured || _groups.Keys.All(_sent.Contains)) return;
+            Texture2D px = _assets.Pixel;
+            var present = GroupDefs.Where(g => _groups.ContainsKey(g.Key)).ToList();
+            int s = 2 * k, bh = 34 * k, gap = 8 * k;
+            string title = _phase == Phase.Deploy ? "QAYSI QISM BIRINCHI HUJUMGA BORSIN?" : "KEYINGI QISMNI YUBORING";
+            var labels = present.Select((g, i) => (g.Key, Text: (i + 1) + ". " + g.Label + " (" + _groups[g.Key].Count(u => !u.IsDown) + ")" + (_sent.Contains(g.Key) ? " - JANGDA" : ""))).ToList();
+            labels.Add(("all", "5. HAMMASI BIRGA"));
+            int bs = s;
+            int Width(string t, int sc) => (int)_font.Measure(t, sc).X + 24 * k;
+            while (bs > k && labels.Sum(l => Width(l.Text, bs)) + gap * (labels.Count - 1) > vw - 40) bs--;
+            int total = labels.Sum(l => Width(l.Text, bs)) + gap * (labels.Count - 1);
+            int py = vh - bh - 18 * k - (_combat.Possessed != null ? 150 * k : 0);
+            int th = PixelFont.GH * s + 10 * k;
+            var panel = new Rectangle(vw / 2 - total / 2 - 14 * k, py - th - 10 * k, total + 28 * k, bh + th + 20 * k);
+            sb.Draw(px, new Rectangle(panel.X - 2, panel.Y - 2, panel.Width + 4, panel.Height + 4), new Color(216, 167, 83, 230));
+            sb.Draw(px, panel, new Color(24, 20, 18, 235));
+            _font.DrawCentered(sb, title, new Vector2(vw / 2f, panel.Y + 6 * k + th / 2f), new Color(255, 214, 90), s);
+            int x = vw / 2 - total / 2;
+            foreach (var l in labels)
+            {
+                int w = Width(l.Text, bs);
+                var r = new Rectangle(x, py, w, bh);
+                bool sent = l.Key != "all" && _sent.Contains(l.Key);
+                Color fill = sent ? new Color(60, 56, 50) : l.Key == "all" ? new Color(150, 40, 30) : new Color(110, 70, 30);
+                sb.Draw(px, new Rectangle(r.X - 1, r.Y - 1, r.Width + 2, r.Height + 2), sent ? new Color(90, 86, 80) : new Color(236, 196, 110));
+                sb.Draw(px, r, fill);
+                _font.DrawCentered(sb, l.Text, r.Center.ToVector2(), sent ? new Color(170, 165, 155) : Color.White, bs);
+                if (!sent) _groupButtons.Add((r, l.Key));
+                x += w + gap;
+            }
+        }
+
         private void DrawSiegeHud(SpriteBatch sb, int vw, int vh, int k)
         {
             Texture2D px = _assets.Pixel;
+            // Saf turgan qismlar ustida nomi (hali yuborilmaganlar)
+            int gi = 0;
+            foreach (var g in GroupDefs)
+            {
+                if (!_groups.TryGetValue(g.Key, out List<Unit> list)) continue;
+                gi++;
+                if (_sent.Contains(g.Key) || _phase >= Phase.Captured) continue;
+                var alive = list.Where(u => !u.IsDown && !u.Hidden).ToList();
+                if (alive.Count == 0) continue;
+                Vector2 c = Vector2.Zero;
+                foreach (Unit u in alive) c += u.Position;
+                c /= alive.Count;
+                Vector2 sp = _camera.WorldToScreen(IsoMath.TileToWorld(c) + new Vector2(0, -70));
+                string lbl = gi + ". " + g.Label;
+                Vector2 m = _font.Measure(lbl, 2 * k);
+                var lr = new Rectangle((int)(sp.X - m.X / 2 - 6 * k), (int)(sp.Y - m.Y / 2 - 3 * k), (int)m.X + 12 * k, (int)m.Y + 6 * k);
+                sb.Draw(px, lr, new Color(24, 20, 18, 210));
+                _font.DrawCentered(sb, lbl, lr.Center.ToVector2(), new Color(255, 214, 90), 2 * k);
+            }
             string top = "QAMAL: " + _t.RegionName + " (" + _t.FoeName + ")   Qo'shiningiz: " + AliveAttackers + "   Dushman: " + AliveDefenders;
-            string goal = _phase == Phase.Assault
+            string goal = _phase < Phase.Captured
                 ? "VAZIFA: saroy eshigiga boring (oltin halqa), ichkarida shoh va vazirni yenging  [shoh " + Math.Max(0, _shahFoe.Hp) + "/" + _shahFoe.MaxHp + "]"
                 : _phase == Phase.Captured ? "Saroy olindi!" : "Qamal muvaffaqiyatsiz";
             int s = 2 * k;
@@ -578,7 +715,7 @@ namespace AndijonSaltanatlar.Combat
                 while (bs > k && _font.Measure(_banner, bs).X > vw - 40) bs--;
                 Vector2 m = _font.Measure(_banner, bs);
                 var br = new Rectangle((int)(vw / 2f - m.X / 2 - 18 * k), (int)(vh * 0.30f), (int)m.X + 36 * k, (int)m.Y + 20 * k);
-                Color bg = _phase == Phase.Defeated ? new Color(90, 26, 24) : _phase == Phase.Assault ? new Color(60, 34, 20) : new Color(28, 90, 46);
+                Color bg = _phase == Phase.Defeated ? new Color(90, 26, 24) : _phase < Phase.Captured ? new Color(60, 34, 20) : new Color(28, 90, 46);
                 sb.Draw(px, new Rectangle(br.X - 2, br.Y - 2, br.Width + 4, br.Height + 4), new Color(240, 200, 110) * a);
                 sb.Draw(px, br, bg * (0.92f * a));
                 _font.DrawCentered(sb, _banner, br.Center.ToVector2(), Color.White * a, bs);
@@ -594,7 +731,8 @@ namespace AndijonSaltanatlar.Combat
                 _font.DrawCentered(sb, _state.Message, mr.Center.ToVector2(), new Color(255, 236, 190), ms);
             }
 
-            if (_combat.Possessed == null && _phase == Phase.Assault)
+            DrawDeployPanel(sb, vw, vh, k);
+            if (_combat.Possessed == null && _phase < Phase.Captured && _groups.Keys.All(_sent.Contains))
             {
                 string hint = "Jangchini bosing va F - ichiga kirib o'zingiz urishing  |  Esc - chekinish";
                 int hs = 2 * k;

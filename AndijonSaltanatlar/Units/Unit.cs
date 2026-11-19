@@ -146,6 +146,17 @@ namespace AndijonSaltanatlar.Units
         public bool Hidden { get; set; }
         /// <summary>Hujum masofasi (tile). Nayzalilar uzunroq uradi.</summary>
         public float AttackRange { get; protected set; } = 0.95f;
+
+        /// <summary>Kamonchi: uzoqdan o'q otadi (qamalda "Kamonchilar" qismi).</summary>
+        public bool IsArcher { get; private set; }
+
+        /// <summary>Jangchini kamonchiga aylantiradi: masofa uzoq, zarba kuchsizroq.</summary>
+        public void MakeArcher(float reach = 4.5f)
+        {
+            IsArcher = true;
+            AttackRange = reach;
+            Attack = System.Math.Max(4, Attack * 3 / 4);
+        }
         /// <summary>Zarba animatsiyasi (oldinga intilish) qolgan vaqti.</summary>
         public float AttackTimer { get; set; }
         /// <summary>Jarohat (qizarish) animatsiyasi qolgan vaqti.</summary>

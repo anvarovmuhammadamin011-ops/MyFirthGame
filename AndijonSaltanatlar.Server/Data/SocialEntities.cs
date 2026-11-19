@@ -13,6 +13,13 @@ namespace AndijonSaltanatlar.Server.Data
         public string Text { get; set; } = "";
         public DateTime SentAt { get; set; }
         public bool Read { get; set; }
+        // --- ELCHI: maktubni elchi olib boradi (yetib borguncha qabul qiluvchi ko'rmaydi) ---
+        /// <summary>Elchi yetib boradigan vaqt (eski xatlar uchun 0001-01-01 — allaqachon yetkazilgan).</summary>
+        public DateTime DeliverAt { get; set; }
+        public int FromRegionId { get; set; }
+        public int ToRegionId { get; set; }
+        public string EnvoyName { get; set; } = "";
+        public string ToName { get; set; } = "";
     }
 
     /// <summary>Sovg'a jurnali: kunlik limitni tekshirish va tarix uchun.</summary>

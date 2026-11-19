@@ -126,6 +126,35 @@ namespace AndijonSaltanatlar.Tests
         }
 
         [Fact]
+        public async Task Envoy_CarriesLetterToAiShah_WhoReadsAndRepliesByEnvoy()
+        {
+            Kingdom me = await Player("andijon");
+            WarMapRegionDto t = await AiTarget(me);
+            using (GameDbContext db = NewDb())
+                Assert.Null(await new OnlineGameService(db, _clock).SendLetterAsync(me, new LetterRequest { ToKingdomId = t.OwnerKingdomId, Text = "Salom! Savdo qilaylik." }));
+
+            LettersResponse mine;
+            using (GameDbContext db = NewDb()) mine = await new OnlineGameService(db, _clock).LettersAsync(me, false);
+            EnvoyDto e = Assert.Single(mine.Envoys);
+            Assert.False(e.Delivered);
+            Assert.True(e.SecondsLeft >= 8);
+            Assert.NotEqual(0, e.FromRegionId);
+            Assert.NotEqual(0, e.ToRegionId);
+
+            // Elchi yetib bordi — AI shoh o'qiydi va o'z elchisi bilan javob yuboradi
+            _clock.Advance(e.TotalSeconds + 1);
+            using (GameDbContext db = NewDb()) mine = await new OnlineGameService(db, _clock).LettersAsync(me, false);
+            Assert.True(mine.Envoys.Single(x => x.LetterId == e.LetterId).Read);
+            Assert.Empty(mine.Letters); // javob hali yo'lda
+
+            _clock.Advance(130);
+            using (GameDbContext db = NewDb()) mine = await new OnlineGameService(db, _clock).LettersAsync(me, true);
+            LetterDto reply = Assert.Single(mine.Letters);
+            Assert.Contains("Savdo", reply.Text);
+            Assert.StartsWith("Elchi", reply.EnvoyName);
+        }
+
+        [Fact]
         public async Task CannotSiegeOwnCastle()
         {
             Kingdom me = await Player("andijon");
