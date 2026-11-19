@@ -24,6 +24,7 @@ namespace AndijonSaltanatlar.UI
         private readonly GameStateManager _state;
         private BattleScene _scene;
         private float _lastTime = -1f;
+        private float _autoTimer;
         private int _seed;
         private bool _rewarded;
         private int _defenseBonusPct;
@@ -98,6 +99,7 @@ namespace AndijonSaltanatlar.UI
             _defenseBonusPct = 0;
             _scene ??= new BattleScene(_assets);
             _scene.Reset();
+            _scene.AutoPlay = true; _autoTimer = 0f;
             _lastTime = -1f;
             return true;
         }
@@ -148,6 +150,7 @@ namespace AndijonSaltanatlar.UI
             _rewarded = false;
             _scene ??= new BattleScene(_assets);
             _scene.Reset();
+            _scene.AutoPlay = true; _autoTimer = 0f;
             _lastTime = -1f;
             return true;
         }
@@ -241,13 +244,65 @@ namespace AndijonSaltanatlar.UI
             if (b == null) return;
             float dt = _lastTime < 0 ? 0f : Math.Clamp(time - _lastTime, 0f, 0.1f);
             _lastTime = time;
+
+            // TABS uslubi: jang o'zi kechadi — har ~2.2 s raund avtomatik hal bo'ladi (o'yinchi kuzatadi va qo'shin qo'shadi)
+            if (b.Status != BattleStatus.Completed)
+            {
+                _autoTimer += dt;
+                if (_autoTimer >= 2.2f)
+                {
+                    _autoTimer = 0f;
+                    BattleDecision auto = WarRules.AiDecision("balanced", _seed, b.Round, b.AttackerPower, b.AttackerStartPower, b.AttackerMorale, b.DefenderPower);
+                    Resolve(auto);
+                }
+            }
+
             ui.Begin(sb, input, vw, vh, time);
             ui.Fill(new Rectangle(0, 0, vw, vh), ui.T.Background);
             BattleScene.Bind(sb);
             BattleSceneAction act = _scene.Draw(ui, sb, b, vw, vh, dt, false);
+            // Pastdagi qo'shin tray'i (TABS): jangga qo'shin qo'shish tugmalari
+            if (Battle != null && Battle.Status != BattleStatus.Completed && _scene.TrayHeight > 0)
+                DrawReinforcementTray(ui, Battle, vw, vh, _scene.TrayHeight);
             ui.End();
             if (act == BattleSceneAction.Decide) Resolve(_scene.SelectedDecision);
             else if (act != BattleSceneAction.None) Close();
+        }
+
+        private static readonly (string Name, UnitLine Line, int Count, int Power, int Cost)[] TrayUnits =
+        {
+            ("Piyoda", UnitLine.Piyoda, 3, 10, 30),
+            ("Nayzachi", UnitLine.Piyoda, 3, 12, 40),
+            ("Kamonchi", UnitLine.Masofaviy, 3, 11, 50),
+            ("Otliq", UnitLine.Otliq, 2, 18, 80),
+            ("Katapulta", UnitLine.Aravasi, 1, 40, 150),
+        };
+
+        private void DrawReinforcementTray(UiKit ui, BattleDto b, int vw, int vh, int trayH)
+        {
+            int n = TrayUnits.Length, pad = 8, gap = ui.Gap;
+            int bw = (vw - pad * 2 - gap * (n - 1)) / n;
+            int y = vh - trayH + 4, h = trayH - 8;
+            for (int i = 0; i < n; i++)
+            {
+                var t = TrayUnits[i];
+                var r = new Rectangle(pad + i * (bw + gap), y, bw, h);
+                bool afford = _state.Coins >= t.Cost;
+                if (ui.Button(r, t.Name + "  " + t.Cost, afford ? ButtonKind.Secondary : ButtonKind.Ghost, afford, "Jangga " + t.Count + " ta " + t.Name + " qo'shish"))
+                    Reinforce(b, t.Line, t.Count, t.Power, t.Cost);
+            }
+        }
+
+        private void Reinforce(BattleDto b, UnitLine line, int count, int powerEach, int cost)
+        {
+            if (_state.Coins < cost) { _state.ShowMessage("Qo'shin qo'shish uchun tanga yetarli emas", true); return; }
+            _state.Coins -= cost;
+            UnitGroupDto g = b.AttackerGroups.FirstOrDefault(x => x.Line == line && x.Level == 1);
+            if (g == null) { g = new UnitGroupDto { Line = line, Level = 1, Count = 0 }; b.AttackerGroups.Add(g); }
+            g.Count += count;
+            int add = count * powerEach;
+            b.AttackerPower += add;
+            b.AttackerStartPower += add;
         }
     }
 }
