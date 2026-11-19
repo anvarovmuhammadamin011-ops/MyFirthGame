@@ -1676,6 +1676,12 @@ public sealed class Game1 : Game
 				if (_storyOverlay != null) _storyOverlay.JournalRequested = false;
 				_questMode = true;
 			}
+			if (_ui.BeautifyRequested)
+			{
+				_ui.BeautifyRequested = false;
+				int added = World.CityBeautifier.Beautify(_map, _buildings, new Random());
+				_state.ShowMessage(added > 0 ? "Shahar bezatildi — " + added + " ta bezak qo'shildi" : "Bezash uchun bo'sh joy topilmadi");
+			}
 			if (_ui.OpenWorldRequested)
 			{
 				_ui.OpenWorldRequested = false;

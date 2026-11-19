@@ -42,7 +42,7 @@ namespace AndijonSaltanatlar.UI
         private int SmallBtn => Touch ? 30 : 22;
         private const int PanelW = 248;
 
-        private enum Tab { None, Build, City, Population, Army, State, Civ, Settings, Diag, Farm, World, Mission }
+        private enum Tab { None, Build, City, Population, Army, State, Civ, Settings, Diag, Farm, World, Mission, Beautify }
 
         private readonly AssetManager _assets;
         private readonly PixelFont _font;
@@ -63,6 +63,8 @@ namespace AndijonSaltanatlar.UI
         public bool OpenCivRequested;
         /// <summary>MISSIYA bo'limi bosildi (Game1 missiyalar ro'yxatini ochadi).</summary>
         public bool OpenMissionsRequested;
+        /// <summary>BEZASH bosildi (Game1 shaharni rang-barang bezaklar bilan bezaydi).</summary>
+        public bool BeautifyRequested;
         /// <summary>Katta oyna ochiq (DIAGNOSTIKA, VAQT, murojaat, vazir...) — missiya kartasi ko'rsatilmaydi.</summary>
         public bool BlocksTracker => _tab == Tab.Diag || TimePanelOpen || FarmRequestOpen || PetitionOpen || AdvisorOpen || (_governorPanel?.IsOpen ?? false);
         public bool AdvisorOpen;
@@ -139,6 +141,7 @@ namespace AndijonSaltanatlar.UI
                 ("DIAGNOSTIKA", Tab.Diag),
                 ("FERMERLIK", Tab.Farm),
                 ("MISSIYA", Tab.Mission),
+                ("BEZASH", Tab.Beautify),
                 (Texts.TabCivilization, Tab.Civ),
                 ("DUNYO", Tab.World),
                 (Texts.TabSettings, Tab.Settings),
@@ -407,6 +410,7 @@ namespace AndijonSaltanatlar.UI
                     if (t == Tab.Civ) { OpenCivRequested = true; return; } // to'liq ekran
                     if (t == Tab.World) { OpenWorldRequested = true; return; } // saltanat xaritasi (to'liq ekran)
                     if (t == Tab.Mission) { OpenMissionsRequested = true; return; } // MISSIYALAR ro'yxati (to'liq ekran)
+                    if (t == Tab.Beautify) { BeautifyRequested = true; return; } // shaharni rang-barang bezaklar bilan bezash
                     if (_tab == t) { _tab = Tab.None; if (t == Tab.Build) _state.CancelBuild(); }
                     else _tab = t;
                     return;

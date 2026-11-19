@@ -192,6 +192,9 @@ namespace AndijonSaltanatlar.Buildings
             _state.Coins -= b.Cost;
             _lastPlaced = Origin;
             _state.ShowMessage(b.Name + " qurildi  (−" + b.Cost + " tanga)");
+            // Uy/bog' atrofi rang-barang bezaklar bilan jonlanadi (har safar har xil).
+            if (b.Type == BuildingType.House || b.Type == BuildingType.Garden)
+                CityBeautifier.DecorateAround(_map, b.Position, b.Size.X, b.Type, _rng, b.Type == BuildingType.Garden ? 5 : 4);
             if (b.Type == BuildingType.House) NewGhost(); // keyingi uy boshqacha ko'rinishda bo'lsin
             IsValid = false;
             return true;
