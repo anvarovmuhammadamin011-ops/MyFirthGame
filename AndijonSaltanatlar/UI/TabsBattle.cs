@@ -109,8 +109,7 @@ namespace AndijonSaltanatlar.UI
             _foeHpBonus = Math.Max(0f, foeHpBonus);
             _time = 0f; _doneT = 0f; Winner = 0;
             Stage = Phase.Deploy;
-            EnsureArt();
-            Deploy(mine, true);
+            Deploy(mine, true);   // teksturalar Draw paytida (grafikasiz testlar ham ishlaydi)
             Deploy(foe, false);
         }
 
@@ -216,6 +215,19 @@ namespace AndijonSaltanatlar.UI
             _time = 0f;
             if (possess) _possessed = _all.FirstOrDefault(f => f.Left && !f.Dead && f.K != Kind.Katapulta);
         }
+
+        /// <summary>Grafikasiz simulyatsiya (testlar uchun): jang bosqichida berilgan soniya davomida yuradi.</summary>
+        public void Simulate(float seconds)
+        {
+            while (seconds > 0f && Stage == Phase.Fight)
+            {
+                float s = Math.Min(seconds, 0.033f);
+                Step(s, null);
+                seconds -= s;
+            }
+        }
+
+        public int AliveCount(bool mine) => Alive(mine);
 
         /// <summary>Esc: jangchi ichida bo'lsa — chiqadi (true). Aks holda false (ArenaController sahnani yopadi).</summary>
         public bool ReleasePossession()
@@ -444,7 +456,7 @@ namespace AndijonSaltanatlar.UI
         public Action Draw(UiKit ui, SpriteBatch sb, InputManager input, int vw, int vh, float dt, string resultText)
         {
             Action act = Action.None;
-            ThemeTokens T = ui.T;
+            EnsureArt();
             int topH = (int)(ui.Type.LineHeight(TextStyle.PanelTitle) * 2f + 22);
             int botH = (int)(ui.ControlH + 22);
             _field = new Rectangle(0, topH, vw, vh - topH - botH);
