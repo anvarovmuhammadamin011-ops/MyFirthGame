@@ -2311,6 +2311,15 @@ public sealed class Game1 : Game
 		}
 		SeasonVisuals.Current = TimePrefs.VisualSeason(_state.Season);
 		SeasonVisuals.Weather = _state.Weather.Current;
+		SeasonVisuals.Wind = _state.Weather.Current switch
+		{
+			AndijonSaltanatlar.Environment.Weather.Storm => 1f,
+			AndijonSaltanatlar.Environment.Weather.Windy => 0.82f,
+			AndijonSaltanatlar.Environment.Weather.Rainy => 0.5f,
+			AndijonSaltanatlar.Environment.Weather.Snowy => 0.35f,
+			AndijonSaltanatlar.Environment.Weather.Clear => 0.18f,
+			_ => 0.3f
+		};
 		bool flag = _captureNextDraw && _opt.ScreenshotPath != null;
 		RenderTarget2D renderTarget2D = null;
 		if (flag)

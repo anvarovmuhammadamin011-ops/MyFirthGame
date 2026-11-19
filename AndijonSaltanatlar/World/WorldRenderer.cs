@@ -64,10 +64,20 @@ namespace AndijonSaltanatlar.World
                 if (o is Decoration dec && AndijonSaltanatlar.Environment.SeasonVisuals.IsFoliage(dec.Type))
                 {
                     tint = AndijonSaltanatlar.Environment.SeasonVisuals.FoliageTint(dec.Type, dec.Position.X * 31 + dec.Position.Y);
-                    sb.Draw(o.Texture, o.DrawPosition, null, tint, 0f, Vector2.Zero, 1f, o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+                    // Shamolda tebranish: daraxt/buta tagidan (ildiz) ozgina egiladi
+                    bool tree = dec.Type == DecorationType.TreePoplar || dec.Type == DecorationType.TreeChinor
+                             || dec.Type == DecorationType.TreeApricot || dec.Type == DecorationType.TreeCypress;
+                    float wind = AndijonSaltanatlar.Environment.SeasonVisuals.Wind;
+                    float phase = dec.Position.X * 0.7f + dec.Position.Y * 1.3f;
+                    float amp = tree ? 0.055f : 0.03f;
+                    float sway = wind * (amp * MathF.Sin(_time * 1.9f + phase) + amp * 0.4f * MathF.Sin(_time * 3.3f + phase * 1.7f));
+                    var origin = new Vector2(o.Texture.Width / 2f, o.Texture.Height);
+                    Vector2 baseC = o.DrawPosition + origin;
+                    SpriteEffects dfx = o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
+                    sb.Draw(o.Texture, baseC, null, tint, sway, origin, 1f, dfx, 0f);
                     float sn = AndijonSaltanatlar.Environment.SeasonVisuals.Snow;
                     if (sn > 0f && _assets.FlashOf(o.Texture) is Texture2D dsil)
-                        sb.Draw(dsil, o.DrawPosition, null, new Color(246, 250, 255) * (sn * 0.55f), 0f, Vector2.Zero, 1f, o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+                        sb.Draw(dsil, baseC, null, new Color(246, 250, 255) * (sn * 0.55f), sway, origin, 1f, dfx, 0f);
                     continue;
                 }
 

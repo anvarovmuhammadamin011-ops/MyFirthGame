@@ -20,6 +20,9 @@ namespace AndijonSaltanatlar.Environment
         /// <summary>Ko'rinadigan havo hissi (fuqarolar rangi va titrashi uchun) — Game1 har kadr o'rnatadi.</summary>
         public static Comfort CurrentComfort = Comfort.Qulay;
 
+        /// <summary>Shamol kuchi (0..1): daraxt va butalar shu darajada tebranib egiladi. Game1 har kadr o'rnatadi.</summary>
+        public static float Wind = 0.25f;
+
         /// <summary>Qor qatlami kuchi (0..1): qishda yer va tomlar oqaradi.</summary>
         public static float Snow => Current == Season.Qish ? (Weather == Weather.Snowy ? 0.82f : 0.68f) : 0f;
 
