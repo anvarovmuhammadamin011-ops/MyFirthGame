@@ -146,7 +146,6 @@ namespace AndijonSaltanatlar.UI
                 ("FERMERLIK", Tab.Farm),
                 ("MISSIYA", Tab.Mission),
                 (Texts.TabCivilization, Tab.Civ),
-                ("DUNYO", Tab.World),
                 (Texts.TabSettings, Tab.Settings),
             };
             _tabRects = new Rectangle[_tabs.Length];

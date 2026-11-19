@@ -217,6 +217,18 @@ namespace AndijonSaltanatlar.Combat
             a.ThinkTimer = Rand(0f, 0.4f);
         }
 
+        /// <summary>Qamal: jangchi saroy ichiga kirdi — tashqaridagi AI va boshqaruvdan olinadi, ko'rinmaydi.</summary>
+        public void Withdraw(Unit u)
+        {
+            if (u == null) return;
+            if (Possessed == u) Possessed = null;
+            _agents.Remove(u);
+            u.ExternallyControlled = true;
+            u.Hidden = true;
+            u.DriveIdle();
+            if (_state.Selected == u) _state.Select(null);
+        }
+
         /// <summary>Qamal: dushman askari hujumchini yaqin masofada sezsa jangga kiradi (aks holda o'z postida/patrulida).</summary>
         private void UpdateSiegeAwareness(float dt)
         {

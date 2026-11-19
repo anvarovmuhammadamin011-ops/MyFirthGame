@@ -990,6 +990,119 @@ namespace AndijonSaltanatlar.Server.Services
             return null;
         }
 
+        // ==================================================================
+        // QAMAL: o'yinchi shahridagi jangchilar bilan (jang mijozda real vaqtda o'tadi)
+        // ==================================================================
+
+        /// <summary>Boshlangan qamallar: saltanat → (qasr, boshlangan vaqt, eng qisqa davom). Server qayta ishga tushsa — tozalanadi.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (int RegionId, DateTime Started, int MinSeconds)> PendingSieges =
+            new System.Collections.Concurrent.ConcurrentDictionary<int, (int, DateTime, int)>();
+
+        /// <summary>Qamal uchun eng qisqa vaqt (yurish + jang): bundan tez kelgan "g'alaba" qabul qilinmaydi.</summary>
+        public const int SiegeMinBattleSeconds = 20;
+
+        private async Task<string> SiegeBlockAsync(Kingdom me, RegionEntity region)
+        {
+            if (region == null) return "Qasr topilmadi";
+            if (region.OwnerKingdomId == me.Id) return "Bu sizning qasringiz";
+            if (region.OwnerKingdomId == 0) return "Mustaqil hudud — uni diplomatik yo'l bilan qo'shib oling";
+            Kingdom owner = await Db.Kingdoms.AsNoTracking().FirstOrDefaultAsync(k => k.Id == region.OwnerKingdomId);
+            if (owner == null) return "Qasr egasi topilmadi";
+            KingdomConflictEntity conflict = await ConflictAsync(me.WorldId, me.Id, owner.Id);
+            if (conflict != null && conflict.TruceUntil > Now) return "Sulh amalda — yurish mumkin emas";
+            return await PvpTargetBlockAsync(owner);
+        }
+
+        public async Task<ActionResultDto> SiegeStartAsync(Kingdom me, SiegeStartRequest req)
+        {
+            await TickKingdomAsync(me);
+            string targetName = "";
+            int seconds = 0;
+            ActionResultDto res = await _online.RunCommandAsync(me, req?.CommandId, async () =>
+            {
+                RegionEntity region = await Db.Regions.AsNoTracking().FirstOrDefaultAsync(r => r.Id == req.RegionId && r.WorldId == me.WorldId);
+                string block = await SiegeBlockAsync(me, region);
+                if (block != null) return block;
+                RegionEntity home = await Db.Regions.AsNoTracking().Where(r => r.OwnerKingdomId == me.Id).OrderBy(r => r.Id).FirstOrDefaultAsync();
+                if (home == null) return "Avval o'z hududingiz bo'lishi kerak";
+                Kingdom owner = await Db.Kingdoms.AsNoTracking().FirstAsync(k => k.Id == region.OwnerKingdomId);
+                KingdomConflictEntity conflict = await ConflictAsync(me.WorldId, me.Id, owner.Id);
+                if (owner.IsAi && !(conflict != null && conflict.Active))
+                {
+                    await SetConflictAsync(me.WorldId, me.Id, owner.Id, active: true, truceUntil: null);
+                    await _kingdom.AdjustRelationAsync(me.WorldId, me.Id, owner.Id, -WarRules.ConflictRelationPenalty);
+                }
+                if (!owner.IsAi)
+                {
+                    await EnsureStateAsync(me);
+                    await Db.WarStates.Where(s => s.KingdomId == me.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.AcceptsPvp, true).SetProperty(x => x.ProtectionWaived, true));
+                }
+                seconds = WarRules.MarchSeconds(home.Latitude, home.Longitude, region.Latitude, region.Longitude);
+                PendingSieges[me.Id] = (region.Id, Now, seconds + SiegeMinBattleSeconds);
+                targetName = region.Name;
+                Emit(me.WorldId, "WarNotice", owner.Id, me.Name + " qo'shini " + region.Name + " qasriga yurish boshladi!");
+                return null;
+            }, "Qo'shin qamalga yo'lga chiqdi");
+            if (res.Success && !res.Duplicate && targetName.Length > 0)
+                res.MessageUz = "Qo'shiningiz " + targetName + " qasriga yo'lga chiqdi — " + seconds + " soniyada yetib boradi";
+            return res;
+        }
+
+        public async Task<ActionResultDto> SiegeFinishAsync(Kingdom me, SiegeFinishRequest req)
+        {
+            await TickKingdomAsync(me);
+            string message = "";
+            ActionResultDto res = await _online.RunCommandAsync(me, req?.CommandId, async () =>
+            {
+                if (!PendingSieges.TryGetValue(me.Id, out var pending) || pending.RegionId != req.RegionId) return "Bu qasrga qamal boshlanmagan";
+                if (req.Won && (Now - pending.Started).TotalSeconds < pending.MinSeconds) return "Qamal hali tugamagan";
+                PendingSieges.TryRemove(me.Id, out _);
+                RegionEntity region = await Db.Regions.AsNoTracking().FirstOrDefaultAsync(r => r.Id == req.RegionId && r.WorldId == me.WorldId);
+                if (region == null || region.OwnerKingdomId == me.Id || region.OwnerKingdomId == 0) { message = "Qasr egasi o'zgargan — natija hisobga olinmadi"; return null; }
+                Kingdom def = await Db.Kingdoms.AsNoTracking().FirstAsync(k => k.Id == region.OwnerKingdomId);
+                if (!req.Won)
+                {
+                    await _kingdom.AdjustRelationAsync(me.WorldId, me.Id, def.Id, -5);
+                    message = region.Name + " qamali muvaffaqiyatsiz — qo'shin chekindi";
+                    return null;
+                }
+                // Himoyachilar yo'qotishi: qamalda yiqilganlar ulushida saltanat qo'shinlari kamayadi
+                float share = req.DefendersTotal > 0 ? Math.Clamp(req.DefendersDown / (float)req.DefendersTotal, 0f, 1f) : 0.5f;
+                foreach (ArmyEntity a in await Db.Armies.AsNoTracking().Where(a => a.KingdomId == def.Id).ToListAsync())
+                {
+                    int st = await ArmyStrengthAsync(a);
+                    if (st > 0) await ApplyLossesAsync(a.Id, (int)(st * share * 0.5f), st, 50);
+                }
+                if (await IsCapitalOrLastAsync(region))
+                {
+                    int defCoin = await Db.KingdomResources.Where(r => r.KingdomId == def.Id).Select(r => r.Coin).FirstOrDefaultAsync();
+                    int plunder = Math.Min(WarRules.PlunderMax, defCoin * WarRules.PlunderPercent / 100);
+                    if (plunder > 0)
+                    {
+                        int took = await Db.KingdomResources.Where(r => r.KingdomId == def.Id && r.Coin >= plunder).ExecuteUpdateAsync(s => s.SetProperty(r => r.Coin, r => r.Coin - plunder));
+                        if (took == 1) await Db.KingdomResources.Where(r => r.KingdomId == me.Id).ExecuteUpdateAsync(s => s.SetProperty(r => r.Coin, r => r.Coin + plunder));
+                        else plunder = 0;
+                    }
+                    message = region.Name + " poytaxti qamal qilindi: shoh yengildi, " + plunder + " tanga o'lja olindi. Poytaxt " + def.Name + " tarkibida qoladi.";
+                }
+                else
+                {
+                    bool moved = await TransferRegionAsync(me, region, def.Id);
+                    message = moved ? region.Name + " endi " + me.Name + " tarkibida! Qasrga bayrog'ingiz tikildi." : region.Name + " egasi o'zgarmadi.";
+                    if (moved)
+                    {
+                        Emit(me.WorldId, "TerritoryOwnershipUpdated", region.Id, me.Id, def.Id);
+                        Emit(me.WorldId, "TerritoryTransferred", me.WorldId, region.Id, me.Id, def.Id, region.Name + " qamal natijasida " + me.Name + " tarkibiga o'tdi");
+                    }
+                }
+                await _kingdom.AdjustRelationAsync(me.WorldId, me.Id, def.Id, -10);
+                await Db.Kingdoms.Where(k => k.Id == me.Id || k.Id == def.Id).ExecuteUpdateAsync(s => s.SetProperty(k => k.StateVersion, k => k.StateVersion + 1));
+                return null;
+            }, "Qamal natijasi qabul qilindi");
+            if (res.Success && !res.Duplicate && message.Length > 0) res.MessageUz = message;
+            return res;
+        }
+
         public async Task<ActionResultDto> MarchAsync(Kingdom me, MarchRequest req)
         {
             await TickKingdomAsync(me);
@@ -1193,6 +1306,9 @@ namespace AndijonSaltanatlar.Server.Services
                     if (block == null && dto.Marches.Any(x => x.IsMine && x.TargetRegionId == r.Id)) block = "Qo'shiningiz allaqachon yo'lda";
                 }
                 m.CanMarch = block == null;
+                // Qamal (shahardagi jangchilar bilan) uchun server qo'shini shart emas
+                m.CanSiege = owner != null && !m.IsMine && (block == null || block.StartsWith("Tayyor qo'shin yo'q") || block.StartsWith("Qo'shiningiz allaqachon"));
+                m.RulerName = owner?.RulerName ?? "";
                 m.BlockReasonUz = block ?? "";
                 if (owner != null && !m.IsMine)
                 {

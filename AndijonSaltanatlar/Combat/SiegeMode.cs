@@ -5,7 +5,9 @@ using AndijonSaltanatlar.Battles;
 using AndijonSaltanatlar.Buildings;
 using AndijonSaltanatlar.Core;
 using AndijonSaltanatlar.Core.Graphics;
+using AndijonSaltanatlar.Interiors;
 using AndijonSaltanatlar.Military;
+using AndijonSaltanatlar.Shared.DTOs;
 using AndijonSaltanatlar.Units;
 using AndijonSaltanatlar.World;
 using Microsoft.Xna.Framework;
@@ -15,17 +17,27 @@ using Microsoft.Xna.Framework.Input;
 namespace AndijonSaltanatlar.Combat
 {
     /// <summary>
-    /// QAMAL — boshqa davlat hududiga yurish. Qo'shiningiz dushmanning O'Z SHAHRIGA boradi: shahar (binolar,
-    /// ko'chalar, aholi, soqchilar) yaratiladi, jangchilaringiz janubiy darvoza oldida saf tortadi va saroy tomon
-    /// yuradi. Dushman soqchilari yaqinlashganda jangga kiradi, aholi qo'ng'iroq bilan uylarga yashirinadi.
+    /// QAMAL — boshqa davlat qasriga yurish. Qo'shiningiz dushmanning O'Z SHAHRIGA boradi: shahar (binolar,
+    /// ko'chalar, aholi, soqchilar) yaratiladi, jangchilaringiz janubiy darvoza oldida saf tortadi va saroy
+    /// tomon yuradi. Dushman soqchilari yaqinlashganda jangga kiradi, aholi qo'ng'iroq bilan uylarga yashirinadi.
     ///  - Istalgan jangchingiz ichiga kirib (F) o'zingiz urishasiz.
-    ///  - Dushman SHOHI saroy eshigida turadi — uni o'ldirsangiz, tirik qolgan dushman askarlari tomoningizga o'tadi.
-    ///  - Shundan keyin SAROYGA KIRSANGIZ — hudud sizniki bo'ladi.
+    ///  - SAROY ESHIGIGA yetgan jangchingiz bilan saroy ICHIGA kirasiz: taxt zalida shoh, vazir va soqchilar.
+    ///  - Shoh va vazirni o'ldirib saroydan chiqsangiz — tirik dushman askarlari tomoningizga o'tadi, qasr sizniki.
     ///  - Qo'shiningiz butunlay yiqilsa yoki Esc bilan chekinsangiz — mag'lubiyat.
+    /// Onlayn dunyo (M xarita) qasrida natija serverga yoziladi: g'alabada qasrga bayrog'ingiz tikiladi.
     /// </summary>
     public sealed class SiegeMode
     {
-        private enum Phase { Assault, ShahDown, Captured, Defeated }
+        private enum Phase { Assault, Captured, Defeated }
+
+        /// <summary>Qamal nishoni (mahalliy saltanat xaritasidan yoki onlayn dunyo xaritasidan).</summary>
+        private sealed class Target
+        {
+            public int RegionId;
+            public string RegionName = "", FoeName = "", RulerName = "";
+            public int AttackerPower, DefenderPower;
+            public bool Capital, Online;
+        }
 
         private readonly AssetManager _assets;
         private readonly GameStateManager _state;
@@ -37,11 +49,16 @@ namespace AndijonSaltanatlar.Combat
         private CombatSystem _combat;
         private WorldRenderer _renderer;
         private CameraManager _camera;
+        private HouseInterior _interior;
+        private Building _palace;
 
         private readonly List<Unit> _attackers = new List<Unit>();
         private readonly List<Unit> _defenders = new List<Unit>();
         private readonly List<Unit> _defectors = new List<Unit>();
-        private ShahUnit _enemyShah;
+        private readonly List<SiegeFoe> _roster = new List<SiegeFoe>();
+        private SiegeFoe _shahFoe, _vizierFoe;
+        private Unit _inside;           // saroy ichidagi jangchi
+        private bool _wasInside;
         private Vector2 _palaceDoor;
         private Phase _phase;
         private float _endTimer;
@@ -49,19 +66,21 @@ namespace AndijonSaltanatlar.Combat
         private string _banner;
         private float _bannerTimer;
         private Unit _lastPossessed;
-
-        private int _attackerPower, _defenderPower, _armyAtStart;
-        private string _regionName = "", _foeName = "", _rulerName = "";
+        private float _manualCam;
+        private Target _t;
+        private int _armyAtStart;
 
         public bool Active { get; private set; }
-        public int RegionId { get; private set; } = -1;
-        /// <summary>Sinov uchun: hozirgi bosqich nomi.</summary>
+        public int RegionId => _t?.RegionId ?? -1;
         public string PhaseName => _phase.ToString();
         public CombatSystem Combat => _combat;
-        public ShahUnit EnemyShah => _enemyShah;
+        public bool InPalace => _interior != null && _interior.Active;
         public IReadOnlyList<Unit> Attackers => _attackers;
         public int AliveAttackers => _units?.Units.Count(u => u.Team == UnitTeam.Player && IsFighter(u) && !u.IsDown) ?? 0;
         public int AliveDefenders => _units?.Units.Count(u => u.Team == UnitTeam.Enemy && IsFighter(u) && !u.IsDown) ?? 0;
+
+        /// <summary>Onlayn qamal tugadi: natija serverga yuboriladi (Game1 o'rnatadi).</summary>
+        public Action<SiegeFinishRequest> OnlineFinished;
 
         public SiegeMode(AssetManager assets, GameStateManager state, PixelFont font)
         {
@@ -76,88 +95,113 @@ namespace AndijonSaltanatlar.Combat
         // BOSHLASH
         // ==================================================================
 
-        /// <summary>Yurish yetib keldi: dushman shahrini yaratib, qamalni boshlaydi. Qo'shin bo'lmasa false.</summary>
+        /// <summary>Mahalliy saltanat xaritasidan yurish yetib keldi.</summary>
         public bool Start(int regionId, Viewport viewport)
         {
             var W = _state.World;
             if (regionId < 0)
-            {
-                // Sinov: birinchi dushman hududi
                 foreach (var rr in W.Regions.Regions)
                     if (rr.OwnerKingdomId != 0 && rr.OwnerKingdomId != W.Kingdoms.PlayerKingdomId) { regionId = rr.Id; break; }
-            }
             var r = W.Regions.Get(regionId);
             if (r == null) return false;
             var def = W.Kingdoms.Get(r.OwnerKingdomId);
             if (def == null || def.Id == W.Kingdoms.PlayerKingdomId) return false;
-            ArmyManager mil = _state.Military;
-            if (mil.TotalUnits == 0) { _state.ShowMessage("Yurish uchun qo'shin yo'q — avval jangchi sotib oling", true); return false; }
+            return Begin(new Target
+            {
+                RegionId = regionId, RegionName = r.Name, FoeName = def.Name,
+                RulerName = string.IsNullOrWhiteSpace(def.RulerName) ? "Hukmdor" : def.RulerName,
+                DefenderPower = Math.Max(20, def.MilitaryStrength), Capital = r.IsCapital, Online = false
+            }, viewport);
+        }
 
-            RegionId = regionId;
-            _regionName = r.Name;
-            _foeName = def.Name;
-            _rulerName = string.IsNullOrWhiteSpace(def.RulerName) ? "Hukmdor" : def.RulerName;
-            _attackerPower = Math.Max(20, mil.TotalStrength);
-            _defenderPower = Math.Max(20, def.MilitaryStrength);
+        /// <summary>Onlayn dunyo xaritasidan (M) qamal: qasr serverdagi saltanatniki.</summary>
+        public bool StartOnline(WarMapRegionDto r, Viewport viewport)
+        {
+            if (r == null) return false;
+            string ruler = string.IsNullOrWhiteSpace(r.RulerName) ? r.OwnerName + " hukmdori" : r.RulerName;
+            return Begin(new Target
+            {
+                RegionId = r.RegionId, RegionName = r.Name, FoeName = r.OwnerName, RulerName = ruler,
+                DefenderPower = Math.Max(20, r.DefenseEstimate), Capital = r.IsCapital, Online = true
+            }, viewport);
+        }
+
+        private bool Begin(Target t, Viewport viewport)
+        {
+            ArmyManager mil = _state.Military;
+            if (mil.TotalUnits == 0) { _state.ShowMessage("Yurish uchun qo'shin yo'q — avval jangchi yollang", true); return false; }
+            _t = t;
+            t.AttackerPower = Math.Max(20, mil.TotalStrength);
             _armyAtStart = mil.TotalUnits;
 
-            // --- Dushman shahri (har hudud o'z urug'i bilan) ---
+            // --- Dushman shahri (har qasr o'z urug'i bilan) ---
             _map = new MapManager(_assets, GameConfig.MapSize, GameConfig.MapSize);
             _buildings = new BuildingManager(_map, _assets);
             _units = new UnitManager(_assets);
-            CityGenerator.Generate(_map, _buildings, _units, 7919 * (regionId + 1));
+            CityGenerator.Generate(_map, _buildings, _units, 7919 * (Math.Abs(t.RegionId) + 1));
             CitizenSpawner.Spawn(_map, _units);
             PatrolController.RouteAll(_map, _units);
             _combat = new CombatSystem(_map, _units, _state) { Buildings = _buildings, SiegeMode = true };
             _renderer = new WorldRenderer(_assets, _font);
+            _interior = new HouseInterior(_assets, _map, _buildings, _state);
 
-            Building palace = _buildings.Buildings.FirstOrDefault(b => b.Type == BuildingType.MainHall);
-            Point door = palace != null ? palace.FrontEntranceTile : new Point(GameConfig.CityCenter, GameConfig.CityCenter - 6);
+            _palace = _buildings.Buildings.FirstOrDefault(b => b.Type == BuildingType.MainHall);
+            Point door = _palace != null ? _palace.FrontEntranceTile : new Point(GameConfig.CityCenter, GameConfig.CityCenter - 6);
             _palaceDoor = new Vector2(door.X + 0.5f, door.Y + 0.6f);
 
-            SetupDefenders(r.IsCapital);
+            SetupDefenders();
+            SetupRoster();
             SetupAttackers(mil);
 
             _phase = Phase.Assault;
             _endTimer = 0f;
             _time = 0f;
             _lastPossessed = null;
-            _combat.SiegeObjective = _enemyShah.Position;
+            _inside = null;
+            _wasInside = false;
+            _combat.SiegeObjective = _palaceDoor;
 
             Vector2 start = _attackers.Count > 0 ? _attackers[0].Position : _palaceDoor;
             _camera = new CameraManager(viewport, IsoMath.TileToWorld(start) + new Vector2(0, -20), 2.0f);
             if (_attackers.Count > 0) _combat.TryPossess(_attackers[0]);
             Active = true;
-            ShowBanner("QAMAL: " + _regionName.ToUpperInvariant() + "!  Dushman shohi " + _rulerName + " saroy eshigida", 5f);
-            _state.ShowMessage("Qo'shiningiz " + _foeName + " shahri darvozasiga yetib keldi! Shoh " + _rulerName + "ni yenging va saroyga kiring.");
+            ShowBanner("QAMAL: " + t.RegionName.ToUpperInvariant() + "!  Saroyga kirib shoh " + t.RulerName + " va vazirni yenging", 5f);
+            _state.ShowMessage("Qo'shiningiz " + t.FoeName + " qasri darvozasiga yetib keldi! Saroyga boring.");
             return true;
         }
 
-        private void SetupDefenders(bool capital)
+        private void SetupDefenders()
         {
             _defenders.Clear();
-            var rng = new Random(RegionId * 31 + 7);
+            var rng = new Random(Math.Abs(_t.RegionId) * 31 + 7);
             // Dushman kuchi: o'yinchi qo'shiniga nisbatan (juda kuchsiz yoki juda kuchli bo'lsa ham o'ynaladigan chegarada)
-            float ratio = Math.Clamp(_defenderPower / (float)Math.Max(1, _attackerPower), 0.45f, 1.6f);
+            float ratio = Math.Clamp(_t.DefenderPower / (float)Math.Max(1, _t.AttackerPower), 0.45f, 1.6f);
             int attackers = Math.Clamp(_armyAtStart, 1, 24);
-            int want = Math.Clamp((int)MathF.Round(attackers * ratio * 0.9f) + (capital ? 2 : 0), 3, 16);
+            int want = Math.Clamp((int)MathF.Round(attackers * ratio * 0.9f) + (_t.Capital ? 2 : 0), 3, 16);
 
             var soldiers = _units.Units.Where(u => IsFighter(u)).ToList();
             // Saroyga eng yaqinlari qoladi (saroy soqchilari doim bor), qolganlardan tasodifiy
             soldiers.Sort((a, b) => Vector2.Distance(a.Position, _palaceDoor).CompareTo(Vector2.Distance(b.Position, _palaceDoor)));
             var keep = new List<Unit>();
             for (int i = 0; i < soldiers.Count && keep.Count < 2; i++) keep.Add(soldiers[i]);
-            var rest = soldiers.Skip(keep.Count).OrderBy(_ => rng.Next()).ToList();
-            foreach (Unit u in rest) if (keep.Count < want) keep.Add(u);
+            foreach (Unit u in soldiers.Skip(keep.Count).OrderBy(_ => rng.Next())) if (keep.Count < want) keep.Add(u);
             foreach (Unit u in soldiers) if (!keep.Contains(u)) _units.Remove(u);
 
             foreach (Unit u in _units.Units) u.Team = UnitTeam.Enemy; // aholi ham — dushman shahri
             _defenders.AddRange(keep);
+        }
 
-            // Dushman shohi saroy eshigi oldida
-            int hp = 240 + (capital ? 120 : 0) + Math.Min(200, _defenderPower / 4);
-            _enemyShah = _units.Add(new ShahUnit(_palaceDoor + new Vector2(0f, 0.6f), _rulerName, hp));
-            _enemyShah.SetFacing(new Vector2(0, 1));
+        /// <summary>Saroy ichidagilar: shoh, vazir va ikki saroy soqchisi.</summary>
+        private void SetupRoster()
+        {
+            _roster.Clear();
+            int bonus = Math.Min(160, _t.DefenderPower / 5) + (_t.Capital ? 80 : 0);
+            _shahFoe = new SiegeFoe { Name = "Shoh " + _t.RulerName, Short = "SHOH", IsShah = true, MaxHp = 220 + bonus, Attack = 13 };
+            _vizierFoe = new SiegeFoe { Name = "Vazir", Short = "VAZIR", IsVizier = true, MaxHp = 110 + bonus / 3, Attack = 7 };
+            _roster.Add(_shahFoe);
+            _roster.Add(_vizierFoe);
+            for (int i = 0; i < 2; i++) _roster.Add(new SiegeFoe { Name = "Saroy soqchisi", Short = "Soqchi", MaxHp = 120 + bonus / 3, Attack = 9 });
+            foreach (SiegeFoe f in _roster) f.Hp = f.MaxHp;
         }
 
         private void SetupAttackers(ArmyManager mil)
@@ -171,8 +215,7 @@ namespace AndijonSaltanatlar.Combat
             {
                 // Bosh (janubiy) darvoza tashqarisida, ko'prik va yo'l bo'ylab ikki qator saf
                 int col = i % 2, row = i / 2;
-                var pos = new Vector2(O + 31.5f + col, O + 55.5f + row * 0.85f);
-                pos = NearestOpen(pos);
+                var pos = NearestOpen(new Vector2(O + 31.5f + col, O + 55.5f + row * 0.85f));
                 Unit u = Create(chosen[i].UnitType, pos);
                 u.Team = UnitTeam.Player;
                 u.SetFacing(new Vector2(0, -1));
@@ -223,17 +266,20 @@ namespace AndijonSaltanatlar.Combat
         // YANGILASH
         // ==================================================================
 
-        /// <param name="input">null — kiritish yo'q (panel ochiq).</param>
         public void Update(float dt, InputManager input, Viewport viewport)
         {
             if (!Active) return;
             _time += dt;
             if (_bannerTimer > 0f) _bannerTimer -= dt;
 
-            if (input != null && _phase < Phase.Captured) HandleInput(input);
+            bool inside = _interior.Active;
+            if (inside) _interior.Update(dt, input);
+            else if (input != null && _phase == Phase.Assault) HandleInput(input);
+            if (_wasInside && !_interior.Active) LeftPalace();
+            _wasInside = _interior.Active;
 
-            _combat.SiegeObjective = _phase == Phase.Assault && !_enemyShah.IsDown ? _enemyShah.Position : _palaceDoor;
-            _combat.Update(dt, _phase < Phase.Captured ? input : null, _camera);
+            _combat.SiegeObjective = _palaceDoor;
+            _combat.Update(dt, _phase == Phase.Assault && !_interior.Active ? input : null, _camera);
 
             float wdt = dt * _combat.TimeScale;
             _units.Update(wdt);
@@ -241,25 +287,22 @@ namespace AndijonSaltanatlar.Combat
             _renderer.Tick(dt);
             _map.Update(dt);
 
-            // Kamera: ichiga kirganda jangchiga ergashadi, aks holda erkin (WASD/sichqoncha)
+            // Kamera: ichiga kirganda jangchiga ergashadi, aks holda qo'shinga (o'yinchi o'zi surmasa)
             Unit p = _combat.Possessed;
             if (p != null && _lastPossessed == null) _camera.SetTargetZoom(2.2f);
             _lastPossessed = p;
             _camera.KeyboardPanEnabled = p == null;
             if (input != null && p == null && (input.IsPanDragging || input.KeyDown(Keys.W) || input.KeyDown(Keys.A) || input.KeyDown(Keys.S) || input.KeyDown(Keys.D)
                 || input.KeyDown(Keys.Up) || input.KeyDown(Keys.Down) || input.KeyDown(Keys.Left) || input.KeyDown(Keys.Right)))
-                _manualCam = 4f; // o'yinchi kamerani o'zi surdi — bir oz ergashmaymiz
+                _manualCam = 4f;
             else if (_manualCam > 0f) _manualCam -= dt;
             if (p != null) _camera.Follow(IsoMath.TileToWorld(p.Position) + new Vector2(0f, -20f), dt);
             else if (_manualCam <= 0f && ArmyFront(out Vector2 front)) _camera.Follow(IsoMath.TileToWorld(front) + new Vector2(0f, -20f), dt, 2.5f);
-            if (input != null) _camera.Update(dt, input, viewport);
+            if (input != null && !_interior.Active) _camera.Update(dt, input, viewport);
 
             UpdatePhase(dt);
         }
 
-        private float _manualCam;
-
-        /// <summary>Qo'shin o'rtasi (tirik jangchilar), kuzatuv kamerasi uchun.</summary>
         private bool ArmyFront(out Vector2 at)
         {
             Vector2 sum = Vector2.Zero;
@@ -272,34 +315,29 @@ namespace AndijonSaltanatlar.Combat
 
         private void HandleInput(InputManager input)
         {
-            Unit p = _combat.Possessed;
-            if (p == null)
+            if (_combat.Possessed != null) return;
+            if (input.KeyPressed(Keys.Escape)) { Retreat(); return; }
+            if (input.LeftPressed && !input.MouseOverUI)
             {
-                if (input.KeyPressed(Keys.Escape)) { Retreat(); return; }
-                // Jangchini bosib tanlash
-                if (input.LeftPressed && !input.MouseOverUI)
-                {
-                    Vector2 world = _camera.ScreenToWorld(input.MouseVector);
-                    if (_renderer.PickAt(world, _map, _buildings, _units) is Unit u && u.Team == UnitTeam.Player && !u.IsDown && IsFighter(u))
-                        _state.Select(u);
-                }
-                if (input.KeyPressed(Keys.F) || input.KeyPressed(Keys.Space))
-                {
-                    Unit pick = _state.Selected as Unit;
-                    if (pick == null || pick.IsDown || pick.Team != UnitTeam.Player || !_units.Units.Contains(pick)) pick = NearestAlly(_camera.Position);
-                    if (pick != null) _combat.TryPossess(pick);
-                }
+                Vector2 world = _camera.ScreenToWorld(input.MouseVector);
+                if (_renderer.PickAt(world, _map, _buildings, _units) is Unit u && u.Team == UnitTeam.Player && !u.IsDown && IsFighter(u))
+                    _state.Select(u);
+            }
+            if (input.KeyPressed(Keys.F) || input.KeyPressed(Keys.Space))
+            {
+                Unit pick = _state.Selected as Unit;
+                if (pick == null || pick.IsDown || pick.Team != UnitTeam.Player || !_units.Units.Contains(pick)) pick = NearestAlly(IsoMath.WorldToTileF(_camera.Position));
+                if (pick != null) _combat.TryPossess(pick);
             }
         }
 
-        private Unit NearestAlly(Vector2 world)
+        private Unit NearestAlly(Vector2 tile)
         {
-            Vector2 tile = IsoMath.WorldToTileF(world);
             Unit best = null;
             float bd = float.MaxValue;
             foreach (Unit u in _units.Units)
             {
-                if (u.Team != UnitTeam.Player || u.IsDown || !IsFighter(u)) continue;
+                if (u.Team != UnitTeam.Player || u.IsDown || u.Hidden || !IsFighter(u)) continue;
                 float d = Vector2.DistanceSquared(u.Position, tile);
                 if (d < bd) { bd = d; best = u; }
             }
@@ -311,15 +349,18 @@ namespace AndijonSaltanatlar.Combat
             switch (_phase)
             {
                 case Phase.Assault:
-                    if (_enemyShah.IsDown) ShahFell();
-                    else if (AliveAttackers == 0) Lose("Qo'shiningiz yengildi...");
-                    break;
-                case Phase.ShahDown:
+                    if (_interior.Active) break;
                     if (AliveAttackers == 0) { Lose("Qo'shiningiz yengildi..."); break; }
-                    foreach (Unit u in _units.Units)
+                    // Saroy eshigiga yetgan jangchi bilan ichkariga: o'zingiz boshqarayotgan bo'lsa — u, aks holda eshikdagisi
+                    Unit p = _combat.Possessed;
+                    if (p != null)
                     {
-                        if (u.Team != UnitTeam.Player || u.IsDown || !IsFighter(u)) continue;
-                        if (Vector2.Distance(u.Position, _palaceDoor) <= 1.4f) { Capture(u); break; }
+                        if (!p.IsDown && Vector2.Distance(p.Position, _palaceDoor) <= 1.3f) EnterPalace(p);
+                    }
+                    else
+                    {
+                        foreach (Unit u in _units.Units)
+                            if (u.Team == UnitTeam.Player && !u.IsDown && !u.Hidden && IsFighter(u) && Vector2.Distance(u.Position, _palaceDoor) <= 1.3f) { EnterPalace(u); break; }
                     }
                     break;
                 case Phase.Captured:
@@ -330,31 +371,63 @@ namespace AndijonSaltanatlar.Combat
             }
         }
 
+        private void EnterPalace(Unit u)
+        {
+            if (_palace == null) return;
+            _inside = u;
+            _combat.Withdraw(u);       // tashqaridagi AI/boshqaruvdan olinadi (saroy ichida o'yinchi boshqaradi)
+            _interior.EnterSiege(_palace, u, _roster, _t.RulerName);
+            _wasInside = true;
+        }
+
+        /// <summary>Saroydan chiqildi: shoh va vazir yengilgan bo'lsa — qasr olindi.</summary>
+        private void LeftPalace()
+        {
+            Unit u = _inside;
+            _inside = null;
+            if (u == null) return;
+            u.Hidden = false;
+            bool won = _shahFoe.Down && _vizierFoe.Down;
+            if (won)
+            {
+                ShahFell();
+                Capture(u);
+                _interior.EndSiege();
+                return;
+            }
+            if (u.IsDown)
+            {
+                ShowBanner(u.Name.ToUpperInvariant() + " SAROYDA YIQILDI!  Boshqa jangchi bilan qayta kiring", 4f);
+                return;
+            }
+            _combat.EnlistAttacker(u);
+            _combat.TryPossess(u);
+            _state.ShowMessage("Saroydan chiqdingiz — shoh va vazir hali tirik!", true);
+        }
+
         /// <summary>Dushman shohi yiqildi: tirik dushman askarlari taslim bo'lib, tomonimizga o'tadi.</summary>
         private void ShahFell()
         {
-            _phase = Phase.ShahDown;
             _defectors.Clear();
             foreach (Unit u in _units.Units.ToList())
             {
-                if (u.Team != UnitTeam.Enemy || u is CitizenUnit || u is ShahUnit || u.IsDown) continue;
+                if (u.Team != UnitTeam.Enemy || u is CitizenUnit || u.IsDown) continue;
                 u.Team = UnitTeam.Player;
                 _defectors.Add(u);
                 _combat.EnlistAttacker(u);
-                u.Revive(1f); // to'liq sog'ayib safga qo'shiladi
+                u.Revive(1f);
             }
-            string who = _defectors.Count > 0 ? " " + _defectors.Count + " ta dushman askari tomoningizga o'tdi!" : "";
-            ShowBanner("SHOH " + _rulerName.ToUpperInvariant() + " HALOK BO'LDI!" + who + " Endi SAROYGA KIRING!", 6f);
-            _state.ShowMessage("Dushman shohi yiqildi!" + who + " Saroy eshigiga boring.");
         }
 
         private void Capture(Unit by)
         {
             _phase = Phase.Captured;
-            _endTimer = 3.5f;
-            by.Hidden = true; // saroyga kirdi
-            if (_combat.Possessed == by) _combat.Release(false);
-            ShowBanner("SAROY OLINDI! " + _regionName.ToUpperInvariant() + " ENDI SIZNIKI!", 4f);
+            _endTimer = 4f;
+            string who = _defectors.Count > 0 ? "  " + _defectors.Count + " ta dushman askari tomoningizga o'tdi!" : "";
+            ShowBanner("SHOH VA VAZIR YENGILDI! " + _t.RegionName.ToUpperInvariant() + " QASRI OLINDI!" + who, 4f);
+            _state.ShowMessage("Saroy olindi! Qasrga bayrog'ingiz tikilmoqda...");
+            by.SetFacing(new Vector2(0, 1));
+            _combat.EnlistAttacker(by);
         }
 
         private void Lose(string why)
@@ -365,15 +438,25 @@ namespace AndijonSaltanatlar.Combat
             ShowBanner(why.ToUpperInvariant() + "  Qamal muvaffaqiyatsiz.", 4f);
         }
 
-        /// <summary>Sinov: dushman shohi darhol yiqiladi.</summary>
+        /// <summary>Sinov: shoh va vazir darhol yiqiladi, qasr olinadi.</summary>
         public void TestKillShah()
         {
-            if (!Active || _enemyShah == null) return;
-            _enemyShah.HitPoints = 0;
-            // Saroy eshigi yaqinidagi hujumchilar (kamera ko'rishi uchun)
+            if (!Active) return;
+            _shahFoe.Hp = 0;
+            _vizierFoe.Hp = 0;
             for (int i = 0; i < _attackers.Count; i++)
-                _attackers[i].Position = NearestOpen(_palaceDoor + new Vector2(-2f + (i % 5), 4f + i / 5));
+                _attackers[i].Position = NearestOpen(_palaceDoor + new Vector2(-2f + (i % 5), 3f + i / 5));
             ShahFell();
+            Capture(_attackers[0]);
+        }
+
+        /// <summary>Sinov: birinchi jangchi bilan darhol saroy ichiga kirish.</summary>
+        public void TestEnterPalace()
+        {
+            if (!Active || _attackers.Count == 0) return;
+            Unit u = _attackers[0];
+            u.Position = _palaceDoor;
+            EnterPalace(u);
         }
 
         /// <summary>Esc (hech kimning ichida bo'lmaganda) — chekinish: mag'lubiyat sifatida hisoblanadi.</summary>
@@ -383,23 +466,18 @@ namespace AndijonSaltanatlar.Combat
             Finish(false, true);
         }
 
-        /// <summary>Natijani dunyoga qo'llaydi (hudud, xazina, qo'shin yo'qotishlari, o'tgan askarlar) va qamalni yopadi.</summary>
+        /// <summary>Natijani qo'llaydi (hudud, xazina, qo'shin yo'qotishlari, o'tgan askarlar) va qamalni yopadi.</summary>
         private void Finish(bool win, bool retreat)
         {
             if (!Active) return;
             Active = false;
+            if (_interior.Active) _interior.Exit();
+            _interior.EndSiege();
             ArmyManager mil = _state.Military;
             int spawned = Math.Max(1, _attackers.Count);
             int fallen = _attackers.Count(u => u.IsDown);
-            float share = fallen / (float)spawned;
-            int aLoss = (int)MathF.Round(_attackerPower * share);
-            int defTotal = Math.Max(1, _defenders.Count);
-            int defDown = _defenders.Count(u => u.IsDown) + (_enemyShah.IsDown ? 1 : 0);
-            int dLoss = (int)MathF.Round(_defenderPower * Math.Min(1f, defDown / (float)defTotal));
-
-            var outcome = win ? BattleOutcome.Galaba : BattleOutcome.Maglubiyat;
-            var res = _state.World.PlayerCampaignResult(RegionId, outcome, _attackerPower, _defenderPower, aLoss, dLoss);
-            if (res != null) _state.Coins += res.CoinChange;
+            int defTotal = _defenders.Count + _roster.Count;
+            int defDown = _defenders.Count(u => u.IsDown) + _roster.Count(f => f.Down);
 
             // Sahnadagi har bir jangchi qo'shinning (TotalUnits / sahnadagilar) qismini ifodalaydi
             int casualties = (int)MathF.Round(fallen * (_armyAtStart / (float)spawned));
@@ -409,14 +487,28 @@ namespace AndijonSaltanatlar.Combat
                 foreach (Unit d in _defectors)
                     if (!d.IsDown) joined += mil.Recruit(TypeOf(d), 1, 1);
             int up = mil.TrainAll(win ? 60 : 30);
-
-            string text = (win ? "G'alaba! " : retreat ? "Chekindik. " : "Mag'lubiyat. ") + (res?.TerritoryResult ?? "")
-                + " Halok bo'lganlar: " + dead + "." + (joined > 0 ? " Qo'shiningizga " + joined + " ta asir askar qo'shildi." : "")
+            string army = " Halok bo'lganlar: " + dead + "." + (joined > 0 ? " Qo'shiningizga " + joined + " ta asir askar qo'shildi." : "")
                 + (up > 0 ? " " + up + " ta jangchi darajasi oshdi." : "");
-            _state.ShowMessage(text, !win);
-            if (win) _state.ShowVizier("Hudud qo'shib olindi!", "Hazratim, " + _regionName + " endi saltanatimizniki! Shoh " + _rulerName + " yengildi" + (joined > 0 ? ", " + joined + " ta askari bizga xizmat qilishga ont ichdi." : "."));
+
+            if (_t.Online)
+            {
+                OnlineFinished?.Invoke(new SiegeFinishRequest
+                {
+                    RegionId = _t.RegionId, Won = win, AttackerFallen = fallen, AttackerTotal = spawned,
+                    DefendersDown = defDown, DefendersTotal = Math.Max(1, defTotal)
+                });
+                _state.ShowMessage((win ? "G'alaba! " + _t.RegionName + " qasri olindi." : retreat ? "Chekindik." : "Mag'lubiyat.") + army, !win);
+            }
+            else
+            {
+                int aLoss = (int)MathF.Round(_t.AttackerPower * (fallen / (float)spawned));
+                int dLoss = (int)MathF.Round(_t.DefenderPower * Math.Min(1f, defDown / (float)Math.Max(1, defTotal)));
+                var res = _state.World.PlayerCampaignResult(_t.RegionId, win ? BattleOutcome.Galaba : BattleOutcome.Maglubiyat, _t.AttackerPower, _t.DefenderPower, aLoss, dLoss);
+                if (res != null) _state.Coins += res.CoinChange;
+                _state.ShowMessage((win ? "G'alaba! " : retreat ? "Chekindik. " : "Mag'lubiyat. ") + (res?.TerritoryResult ?? "") + army, !win);
+            }
+            if (win) _state.ShowVizier("Qasr olindi!", "Hazratim, " + _t.RegionName + " endi saltanatimizniki! Shoh " + _t.RulerName + " va vaziri yengildi" + (joined > 0 ? ", " + joined + " ta askari bizga xizmat qilishga ont ichdi." : "."));
             _state.Select(null);
-            RegionId = -1;
         }
 
         private void ShowBanner(string text, float seconds)
@@ -432,11 +524,17 @@ namespace AndijonSaltanatlar.Combat
         public void Draw(SpriteBatch sb, GraphicsDevice gd, int vw, int vh, float hudScale)
         {
             if (_map == null) return;
+            if (_interior.Active)
+            {
+                gd.Clear(new Color(20, 16, 14));
+                _interior.Draw(sb, _assets.Pixel, _font, vw, vh, 0f);
+                return;
+            }
             gd.Clear(new Color(26, 30, 22));
             Vector4 view = _camera.VisibleWorldRect;
             sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, _camera.Transform);
             _map.Draw(sb, view);
-            if (_phase == Phase.ShahDown)
+            if (_phase == Phase.Assault)
             {
                 // Saroy eshigi — maqsad (miltillovchi oltin halqa)
                 float pulse = 0.55f + 0.12f * MathF.Sin(_time * 5f);
@@ -458,22 +556,21 @@ namespace AndijonSaltanatlar.Combat
         private void DrawSiegeHud(SpriteBatch sb, int vw, int vh, int k)
         {
             Texture2D px = _assets.Pixel;
-            // Yuqori panel: hudud, kuchlar, vazifa
-            string top = "QAMAL: " + _regionName + " (" + _foeName + ")   Qo'shiningiz: " + AliveAttackers + "   Dushman: " + AliveDefenders;
+            string top = "QAMAL: " + _t.RegionName + " (" + _t.FoeName + ")   Qo'shiningiz: " + AliveAttackers + "   Dushman: " + AliveDefenders;
             string goal = _phase == Phase.Assault
-                ? "VAZIFA: Shoh " + _rulerName + "ni yenging  (" + Math.Max(0, _enemyShah.HitPoints) + "/" + _enemyShah.MaxHitPoints + ")"
-                : _phase == Phase.ShahDown ? "VAZIFA: Saroyga kiring! (oltin halqa — saroy eshigi)"
+                ? "VAZIFA: saroy eshigiga boring (oltin halqa), ichkarida shoh va vazirni yenging  [shoh " + Math.Max(0, _shahFoe.Hp) + "/" + _shahFoe.MaxHp + "]"
                 : _phase == Phase.Captured ? "Saroy olindi!" : "Qamal muvaffaqiyatsiz";
             int s = 2 * k;
             int lh = PixelFont.GH * s + 6 * k;
-            int w = Math.Min(vw - 16, (int)Math.Max(_font.Measure(top, s).X, _font.Measure(goal, s).X) + 28 * k);
-            var r = new Rectangle(vw / 2 - w / 2, 6 * k, w, lh * 2 + 8 * k);
+            int wTop = Math.Min(vw - 16, (int)Math.Max(_font.Measure(top, s).X, _font.Measure(goal, s).X) + 28 * k);
+            int gs = s;
+            while (gs > k && _font.Measure(goal, gs).X > wTop - 20) gs--;
+            var r = new Rectangle(vw / 2 - wTop / 2, 6 * k, wTop, lh * 2 + 8 * k);
             sb.Draw(px, new Rectangle(r.X - 2, r.Y - 2, r.Width + 4, r.Height + 4), new Color(216, 167, 83, 220));
             sb.Draw(px, r, new Color(24, 20, 18, 225));
             _font.DrawCentered(sb, top, new Vector2(vw / 2f, r.Y + 4 * k + lh / 2f), new Color(240, 226, 196), s);
-            _font.DrawCentered(sb, goal, new Vector2(vw / 2f, r.Y + 4 * k + lh * 1.5f), _phase == Phase.ShahDown ? new Color(255, 214, 90) : new Color(255, 170, 140), s);
+            _font.DrawCentered(sb, goal, new Vector2(vw / 2f, r.Y + 4 * k + lh * 1.5f), new Color(255, 214, 90), gs);
 
-            // Katta banner (shoh o'ldi, saroy olindi, ...)
             if (_bannerTimer > 0f && _banner != null)
             {
                 float a = Math.Min(1f, _bannerTimer / 0.6f);
@@ -487,7 +584,6 @@ namespace AndijonSaltanatlar.Combat
                 _font.DrawCentered(sb, _banner, br.Center.ToVector2(), Color.White * a, bs);
             }
 
-            // Xabar (o'yin xabarlari shu yerda ham ko'rinadi)
             if (_state.MessageTimer > 0f && !string.IsNullOrEmpty(_state.Message))
             {
                 int ms = 2 * k;
@@ -498,7 +594,7 @@ namespace AndijonSaltanatlar.Combat
                 _font.DrawCentered(sb, _state.Message, mr.Center.ToVector2(), new Color(255, 236, 190), ms);
             }
 
-            if (_combat.Possessed == null && _phase < Phase.Captured)
+            if (_combat.Possessed == null && _phase == Phase.Assault)
             {
                 string hint = "Jangchini bosing va F - ichiga kirib o'zingiz urishing  |  Esc - chekinish";
                 int hs = 2 * k;

@@ -169,6 +169,7 @@ namespace AndijonSaltanatlar.UI
         {
             _input = input;
             _client.Pump();
+            UpdateSiegeMarch();
             if (_client.MessageSerial != _lastSerial) { _lastSerial = _client.MessageSerial; ShowToast(_client.Message, _client.MessageIsError); }
             if (_client.Notification != null) { ShowToast(_client.Notification, false); _client.Notification = null; }
             if (_toastTimer > 0f) _toastTimer -= dt;

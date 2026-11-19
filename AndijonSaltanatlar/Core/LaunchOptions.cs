@@ -106,6 +106,9 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: qamalda dushman shohi darhol yiqiladi (askarlar tomonga o'tadi).</summary>
 	public bool SiegeShahDown;
 
+	/// <summary>Sinov: qamalda birinchi jangchi bilan darhol saroy ichiga kiriladi.</summary>
+	public bool SiegePalace;
+
 	/// <summary>Sinov: qamalda hech kimning ichiga kirilmaydi (qo'shin o'zi jang qiladi).</summary>
 	public bool SiegeWatch;
 
@@ -329,6 +332,9 @@ public sealed class LaunchOptions
 			case "--siege":
 				launchOptions.SiegeRegion = int.Parse(text, CultureInfo.InvariantCulture);
 				i++;
+				break;
+			case "--siege-palace":
+				launchOptions.SiegePalace = true;
 				break;
 			case "--siege-watch":
 				launchOptions.SiegeWatch = true;

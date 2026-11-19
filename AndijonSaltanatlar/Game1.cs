@@ -112,6 +112,8 @@ public sealed class Game1 : Game
 	private AndijonSaltanatlar.Combat.SiegeMode _siege;
 	private bool _siegeFromMap;
 	private bool _siegeTestPending;
+	/// <summary>Qamal onlayn dunyo xaritasidan (M) boshlangan — tugagach xarita qayta ochiladi.</summary>
+	private bool _siegeOnline;
 	private readonly FarmWorkController _farmWork = new FarmWorkController();
 	private readonly SwimController _swim = new SwimController();
 
@@ -256,6 +258,7 @@ public sealed class Game1 : Game
 		_uiKit = new AndijonSaltanatlar.UI.Design.UiKit(_assets.Pixel, new AndijonSaltanatlar.UI.Design.Typography(_font));
 		_perf = new Core.PerformanceMonitor();
 		_onlinePanel = new OnlinePanel(_assets, _font, _online, _uiKit);
+		_onlinePanel.LocalArmyCount = () => _state?.Military?.TotalUnits ?? 0;
 		_renderer = new WorldRenderer(_assets, _font);
 		_glow = BuildGlow();
 		_mainMenu = new MainMenuScreen(_assets, _font) { Ui = _uiKit };
@@ -560,6 +563,7 @@ public sealed class Game1 : Game
 		_strategic = new StrategicView(_assets, _font, _state);
 		_arena = new ArenaController(_assets, _state);
 		_siege = new AndijonSaltanatlar.Combat.SiegeMode(_assets, _state, _font);
+		_siege.OnlineFinished = req => _online.SiegeFinish(req);
 		_siegeTestPending = _opt.SiegeRegion.HasValue;
 		_civ = new CivilizationView(_assets, _font, _state);
 		_quest = new QuestJournalView(_assets, _font, _state);
@@ -1608,13 +1612,26 @@ public sealed class Game1 : Game
 				_siegeFromMap = true;
 				_strategicMode = false;
 				if (_opt.SiegeShahDown) _siege.TestKillShah();
+				if (_opt.SiegePalace) _siege.TestEnterPalace();
 			}
+		}
+		// Onlayn dunyo xaritasidan (M) yurish qasrga yetib keldi — dushman shahrida qamal
+		if (_onlinePanel.SiegeArrived != null && !_siege.Active && !_loginMode && !_menuMode)
+		{
+			var target = _onlinePanel.SiegeArrived;
+			_onlinePanel.SiegeArrived = null;
+			if (_onlinePanel.IsOpen) _onlinePanel.Close();
+			if (_interior != null && _interior.Active) _interior.Exit();
+			if (_combat != null && _combat.Possessed != null) _combat.Release(false);
+			_strategicMode = _civMode = _questMode = false;
+			if (_siege.StartOnline(target, GraphicsDevice.Viewport)) { _siegeFromMap = true; _siegeOnline = true; }
 		}
 		if (_siegeFromMap && !_siege.Active)
 		{
-			// Qamal tugadi — saltanat xaritasiga qaytamiz (natija xaritada ko'rinadi)
+			// Qamal tugadi — xaritaga qaytamiz (natija va yangi bayroq xaritada ko'rinadi)
 			_siegeFromMap = false;
-			_strategicMode = true;
+			if (_siegeOnline) { _siegeOnline = false; if (!_onlinePanel.IsOpen) _onlinePanel.ToggleWorldMap(); }
+			else _strategicMode = true;
 		}
 		if (_arenaFromMap && !_arena.Active)
 		{

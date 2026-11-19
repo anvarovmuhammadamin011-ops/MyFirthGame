@@ -195,6 +195,10 @@ namespace AndijonSaltanatlar.Shared.DTOs
         public int Population { get; set; }
         public int DefenseEstimate { get; set; }
         public bool CanMarch { get; set; }
+        /// <summary>Shahardagi o'z jangchilaringiz bilan qamal qilish mumkinmi (server qo'shini shart emas).</summary>
+        public bool CanSiege { get; set; }
+        /// <summary>Qasr egasining hukmdori (qamalda saroyda o'ldiriladigan shoh).</summary>
+        public string RulerName { get; set; } = "";
         public string BlockReasonUz { get; set; } = "";
         public string OutcomeUz { get; set; } = "";
         public int MarchSeconds { get; set; }
@@ -260,6 +264,19 @@ namespace AndijonSaltanatlar.Shared.DTOs
     public sealed class FacilityRequest { public string CommandId { get; set; } = ""; public FacilityKind Kind { get; set; } }
     public sealed class CommanderRequest { public string CommandId { get; set; } = ""; public int CommanderId { get; set; } public int ArmyId { get; set; } }
     public sealed class CreateArmyRequest { public string CommandId { get; set; } = ""; public string Name { get; set; } = ""; }
+    /// <summary>Qamal: o'yinchi shahridagi jangchilar bilan qasrga yurish (jang o'yinchi kompyuterida, real vaqtda).</summary>
+    public sealed class SiegeStartRequest { public string CommandId { get; set; } = ""; public int RegionId { get; set; } }
+    /// <summary>Qamal natijasi: g'alaba (shoh va vazir o'ldirildi, saroy olindi) yoki mag'lubiyat/chekinish.</summary>
+    public sealed class SiegeFinishRequest
+    {
+        public string CommandId { get; set; } = "";
+        public int RegionId { get; set; }
+        public bool Won { get; set; }
+        public int AttackerFallen { get; set; }
+        public int AttackerTotal { get; set; }
+        public int DefendersDown { get; set; }
+        public int DefendersTotal { get; set; }
+    }
     public sealed class MarchRequest { public string CommandId { get; set; } = ""; public int ArmyId { get; set; } public int RegionId { get; set; } }
     public sealed class StartBattleRequest { public string CommandId { get; set; } = ""; public int ArmyId { get; set; } public int RegionId { get; set; } }
     public sealed class BattleDecisionRequest { public string CommandId { get; set; } = ""; public int BattleId { get; set; } public int Round { get; set; } public BattleDecision Decision { get; set; } }

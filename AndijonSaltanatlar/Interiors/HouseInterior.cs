@@ -23,7 +23,7 @@ namespace AndijonSaltanatlar.Interiors
     /// Shahar simulyatsiyasi orqada davom etadi. Boshqarilayotgan unitning shahardagi Position'i
     /// ichkarida o'zgarmaydi; chiqishda u bino eshigi oldiga qo'yiladi.
     /// </summary>
-    public sealed class HouseInterior
+    public sealed partial class HouseInterior
     {
         private const int N = InteriorArt.N;
         private const float WalkSpeed = 2.1f, RunSpeed = 3.1f;
@@ -56,6 +56,9 @@ namespace AndijonSaltanatlar.Interiors
             public bool FixedFacing; // taxtdagi shoh doim zalga qaraydi
             public string ChatText;  // o'zaro suhbat (ambient gaplashish) matni
             public float ChatTime;   // suhbat pufagi qolgan ko'rsatish vaqti
+            // --- Qamal jangi (saroy himoyachisi) ---
+            public SiegeFoe Foe;
+            public float Hurt, Lunge, Cooldown, DownTime;
         }
 
         private readonly Dictionary<string, Texture2D> _tex = new Dictionary<string, Texture2D>();
@@ -209,6 +212,7 @@ namespace AndijonSaltanatlar.Interiors
         public void Enter(Building building, Unit avatar)
         {
             if (building == null || avatar == null) return;
+            _fight = false;
             if (!MayEnter(building, avatar))
             {
                 _state.ShowMessage("Saroyga faqat soqchilar va jangchilar kira oladi!", true);
@@ -856,6 +860,12 @@ namespace AndijonSaltanatlar.Interiors
         {
             if (!Active || _avatar == null) return;
             _time += dt;
+            if (_fight)
+            {
+                for (int i = 0; i < _residents.Count; i++) if (_residents[i].ChatTime > 0f) _residents[i].ChatTime -= dt;
+                UpdateFight(dt, input);
+                return;
+            }
             UpdateFamilyBaker(dt);
             UpdateChatter(dt);
             if (input == null) { _avatar.DriveIdle(); return; }
@@ -1470,7 +1480,7 @@ namespace AndijonSaltanatlar.Interiors
             {
                 Resident rr = r;
                 bool left = rr.FixedFacing ? false : FacesLeft(rr.Pos, _pos);
-                items.Add((rr.Pos.X + rr.Pos.Y, 1, () => DrawPerson(sb, rr.Tex, rr.Pos, left, rr.Scale, rr.Lift)));
+                items.Add((rr.Pos.X + rr.Pos.Y, 1, () => DrawResident(sb, rr, left)));
             }
             float avatarDepth = CurrentPose == Pose.Lie ? _bedPos.X + _bedPos.Y + 1.2f : _pos.X + _pos.Y;
             if (_carryBread)
@@ -1593,10 +1603,10 @@ namespace AndijonSaltanatlar.Interiors
                 Color nameCol = r.IsShah ? new Color(255, 214, 90) : isNear ? new Color(255, 220, 120) : new Color(230, 220, 200);
                 Label(sb, px, font, sp, name, nameCol, new Color(0, 0, 0, 140));
                 // Suhbat pufagi: o'zaro gaplashayotgan odamlar (yaqin bo'lmasa ham), aks holda yaqindagining salomi
-                string bubble = r.ChatTime > 0f && !string.IsNullOrEmpty(r.ChatText) ? r.ChatText : (isNear ? r.Line : null);
+                string bubble = r.ChatTime > 0f && !string.IsNullOrEmpty(r.ChatText) ? r.ChatText : (isNear && !_fight ? r.Line : null);
                 if (isNear && !string.IsNullOrEmpty(r.Info)) Label(sb, px, font, sp + new Vector2(0, 16), r.Info, new Color(200, 190, 170), new Color(0, 0, 0, 120));
                 if (!string.IsNullOrEmpty(bubble)) Bubble(sb, px, font, sp + new Vector2(0, -26), bubble);
-                if (isNear && r.IsShah) Label(sb, px, font, sp + new Vector2(0, 34), "[F] SHOH BO'LIB SHAHARGA CHIQISH", new Color(255, 214, 90), new Color(60, 20, 10, 220));
+                if (isNear && r.IsShah && !_fight) Label(sb, px, font, sp + new Vector2(0, 34), "[F] SHOH BO'LIB SHAHARGA CHIQISH", new Color(255, 214, 90), new Color(60, 20, 10, 220));
             }
 
             // Non yopayotgan oila a'zosi — nima qilayotgani doim ko'rinadi
@@ -1696,7 +1706,9 @@ namespace AndijonSaltanatlar.Interiors
                 font.Draw(sb, "Mudofaa kuchi: " + AndijonSaltanatlar.Defense.CityDefenseManager.Compute(_buildings, _state.Military.TotalStrength), new Vector2(pr.X + 18, ly), new Color(226, 222, 210), 2);
             }
 
-            string hint = _kind == InteriorKind.House || _palace
+            if (_fight) DrawFightOverlay(sb, px, font, m);
+            string hint = _fight ? "WASD yurish | SPACE / sichqoncha - zarba | SHIFT yugurish | eshik - chiqish"
+                : _kind == InteriorKind.House || _palace
                 ? "WASD yurish | SHIFT yugurish | ENTER / ESC yoki eshik - tashqariga chiqish"
                 : "WASD yurish | E harakat | Q ikkinchi harakat | ESC - tashqariga chiqish";
             Vector2 hs = font.Measure(hint, 2);

@@ -60,6 +60,8 @@ namespace AndijonSaltanatlar.Server.Controllers
         [HttpPost("army/create")] public Task<IActionResult> CreateArmy([FromBody] CreateArmyRequest r) => Act(k => _war.CreateArmyAsync(k, r));
         [HttpPost("decision")] public Task<IActionResult> Decision([FromBody] BattleDecisionRequest r) => Act(k => _war.SubmitDecisionAsync(k, r), r?.BattleId ?? 0);
         [HttpPost("march")] public Task<IActionResult> March([FromBody] MarchRequest r) => Act(k => _war.MarchAsync(k, r));
+        [HttpPost("siege/start")] public Task<IActionResult> SiegeStart([FromBody] SiegeStartRequest r) => Act(k => _war.SiegeStartAsync(k, r));
+        [HttpPost("siege/finish")] public Task<IActionResult> SiegeFinish([FromBody] SiegeFinishRequest r) => Act(k => _war.SiegeFinishAsync(k, r));
         [HttpPost("peace")] public Task<IActionResult> Peace([FromBody] PeaceRequest r) => Act(k => _war.ProposePeaceAsync(k, r));
         [HttpPost("pvp/invite")] public Task<IActionResult> Invite([FromBody] PvpInviteRequest r) => Act(k => _war.InviteAsync(k, r));
         [HttpPost("pvp/setting")] public Task<IActionResult> PvpSetting([FromBody] PvpSettingRequest r) => Act(k => _war.SetPvpAsync(k, r));

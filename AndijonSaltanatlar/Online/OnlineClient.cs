@@ -492,7 +492,10 @@ namespace AndijonSaltanatlar.Online
 
         public void CloseBattle() => Battle = null;
 
-        private void WarCommand(string path, Func<string, object> body)
+        private void WarCommand(string path, Func<string, object> body) => WarCommand(path, body, null);
+
+        /// <param name="done">Natija (asosiy oqimda): muvaffaqiyat yoki yo'q.</param>
+        private void WarCommand(string path, Func<string, object> body, Action<bool> done)
         {
             if (!LoggedIn) { SetMessage("Avval serverga kiring", true); return; }
             if (WarBusy) return;
@@ -505,7 +508,7 @@ namespace AndijonSaltanatlar.Online
                     HttpResponseMessage resp;
                     try { resp = await _http.PostAsJsonAsync(path, body(commandId), WarJson); }
                     catch (HttpRequestException) { resp = await _http.PostAsJsonAsync(path, body(commandId), WarJson); } // xavfsiz takror (idempotent)
-                    if (!resp.IsSuccessStatusCode) { SetMessage(await ErrorText(resp, "Buyruq bajarilmadi"), true); return; }
+                    if (!resp.IsSuccessStatusCode) { SetMessage(await ErrorText(resp, "Buyruq bajarilmadi"), true); if (done != null) Post(() => done(false)); return; }
                     WarActionResultDto r = await resp.Content.ReadFromJsonAsync<WarActionResultDto>(WarJson);
                     BattleDto battle = null;
                     if (r.Success && r.BattleId > 0)
@@ -516,10 +519,11 @@ namespace AndijonSaltanatlar.Online
                     {
                         if (r.Overview != null) War = r.Overview;
                         if (battle != null) { Battle = battle; BattleSerial++; if (path.EndsWith("battle/start") || path.EndsWith("pvp/respond")) OpenBattleRequest = battle.Id; }
+                        done?.Invoke(r.Success);
                     });
                     SetMessage(r.MessageUz, !r.Success);
                 }
-                catch (Exception ex) { SetMessage("Xato: " + Short(ex.Message), true); }
+                catch (Exception ex) { SetMessage("Xato: " + Short(ex.Message), true); if (done != null) Post(() => done(false)); }
                 finally { Post(() => WarBusy = false); }
             });
         }
@@ -532,6 +536,10 @@ namespace AndijonSaltanatlar.Online
         public void CreateArmy(string name) => WarCommand("api/war/army/create", id => new CreateArmyRequest { CommandId = id, Name = name });
         public void StartBattle(int armyId, int regionId) => WarCommand("api/war/battle/start", id => new StartBattleRequest { CommandId = id, ArmyId = armyId, RegionId = regionId });
         public void SubmitDecision(int battleId, int round, Shared.War.BattleDecision d) => WarCommand("api/war/decision", id => new BattleDecisionRequest { CommandId = id, BattleId = battleId, Round = round, Decision = d });
+        /// <summary>Qamal: shahardagi jangchilar bilan qasrga yurish (server ro'yxatga oladi, jang mijozda).</summary>
+        public void SiegeStart(int regionId, Action<bool> done) => WarCommand("api/war/siege/start", id => new SiegeStartRequest { CommandId = id, RegionId = regionId }, done);
+        /// <summary>Qamal natijasi: g'alabada hudud (poytaxt bo'lmasa) saltanatga o'tadi.</summary>
+        public void SiegeFinish(SiegeFinishRequest req) { WarBusy = false; WarCommand("api/war/siege/finish", id => { req.CommandId = id; return req; }, ok => LoadWar()); }
         public void March(int armyId, int regionId) => WarCommand("api/war/march", id => new MarchRequest { CommandId = id, ArmyId = armyId, RegionId = regionId });
         public void ProposePeace(int kingdomId) => WarCommand("api/war/peace", id => new PeaceRequest { CommandId = id, KingdomId = kingdomId });
         public void InvitePvp(int toKingdomId, int armyId, int stakeRegionId) => WarCommand("api/war/pvp/invite", id => new PvpInviteRequest { CommandId = id, ToKingdomId = toKingdomId, ArmyId = armyId, StakeRegionId = stakeRegionId });

@@ -22,6 +22,44 @@ namespace AndijonSaltanatlar.UI
         private float _mapFetchTime;
 
         private UzMapCanvas _warCanvas;
+
+        // --- QAMAL: shahardagi o'z jangchilaringiz bilan yurish (jang o'yinchi kompyuterida, real vaqtda) ---
+        /// <summary>Shahardagi jangchilar soni (Game1 beradi).</summary>
+        public Func<int> LocalArmyCount;
+        /// <summary>Qo'shin qasrga yetib keldi — Game1 qamalni boshlaydi va buni null qiladi.</summary>
+        public WarMapRegionDto SiegeArrived { get; set; }
+        public bool SiegeMarching => _siegeTarget != null;
+        private WarMapRegionDto _siegeTarget;
+        private int _siegeHome = -1;
+        private int[] _siegeColor = { 70, 130, 220 };
+        private string _siegeFlag = "";
+        private DateTime _siegeArrive;
+        private int _siegeTotal;
+
+        /// <summary>Har kadr (xarita yopiq bo'lsa ham): yurish vaqti tugadimi.</summary>
+        private void UpdateSiegeMarch()
+        {
+            if (_siegeTarget != null && DateTime.UtcNow >= _siegeArrive)
+            {
+                SiegeArrived = _siegeTarget;
+                _siegeTarget = null;
+            }
+        }
+
+        private void BeginSiegeMarch(WarMapRegionDto r, WarMapRegionDto home)
+        {
+            WarMapRegionDto target = r;
+            _client.SiegeStart(r.RegionId, ok =>
+            {
+                if (!ok) return;
+                _siegeTarget = target;
+                _siegeHome = home?.RegionId ?? -1;
+                _siegeColor = home?.Color ?? _siegeColor;
+                _siegeFlag = home?.Flag ?? "";
+                _siegeTotal = Math.Max(5, target.MarchSeconds);
+                _siegeArrive = DateTime.UtcNow.AddSeconds(_siegeTotal);
+            });
+        }
         private readonly List<MapCell> _cellBuf = new List<MapCell>();
 
         private void DrawWarMap(Rectangle c, WarOverviewDto w)
@@ -97,6 +135,27 @@ namespace AndijonSaltanatlar.UI
                 var lr = new Rectangle((int)(p.X - ls.X / 2 - 6), (int)(p.Y + 12 * s), (int)ls.X + 12, (int)ui.Type.LineHeight(TextStyle.Caption) + 4);
                 ui.Frame(lr, m.TargetIsMine ? new Color(150, 40, 30) : new Color(236, 220, 180), Ink, 1, false);
                 ui.Type.DrawFitted(_sbOf(), lbl, lr, TextStyle.Caption, m.TargetIsMine ? new Color(250, 236, 210) : Ink, 1);
+            }
+
+            // Qamalga ketayotgan o'z qo'shinimiz (shahardagi jangchilar)
+            if (_siegeTarget != null)
+            {
+                Vector2 a = Pos(_siegeHome), b = Pos(_siegeTarget.RegionId);
+                if (a.X > -9000 && b.X > -9000)
+                {
+                    Color kc = Col(_siegeColor);
+                    float left = (float)Math.Max(0, (_siegeArrive - DateTime.UtcNow).TotalSeconds);
+                    float t = MathHelper.Clamp(1f - left / Math.Max(1, _siegeTotal), 0f, 1f);
+                    cv.DashedLine(a, b, kc * 0.9f, 3, 12, 6);
+                    Vector2 p = Vector2.Lerp(a, b, t) + new Vector2(0, MathF.Sin(ui.Time * 8) * 2);
+                    DrawArmyMarker(p, kc, s, LocalArmyCount?.Invoke() ?? 0);
+                    FlagRenderer.DrawOnPole(ui, p + new Vector2(0, -11 * s), (int)(16 * s), (int)(16 * s), FlagRenderer.Spec(_siegeFlag, kc), ui.Time, 7);
+                    string lbl = "Qamalga: " + (int)Math.Ceiling(left) + " s";
+                    Vector2 ls = ui.Type.Measure(lbl, TextStyle.Caption);
+                    var lr = new Rectangle((int)(p.X - ls.X / 2 - 6), (int)(p.Y + 12 * s), (int)ls.X + 12, (int)ui.Type.LineHeight(TextStyle.Caption) + 4);
+                    ui.Frame(lr, new Color(236, 220, 180), Ink, 1, false);
+                    ui.Type.DrawFitted(_sbOf(), lbl, lr, TextStyle.Caption, Ink, 1);
+                }
             }
 
             // Bosish: eng yaqin qasr (diplomatiya oynasi ochiq bo'lsa — xaritaga bosish o'tmaydi)
@@ -226,20 +285,19 @@ namespace AndijonSaltanatlar.UI
             // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat
             y = DrawDiplomacyRow(x, y, iw, r);
 
-            // Qo'shin tanlash
-            var ready = w.Armies.Where(a => a.Status == ArmyStatus.Available && a.UnitCount >= WarRules.MinBattleArmy).ToList();
-            if (ready.Count > 0)
-            {
-                if (!ready.Any(a => a.Id == _marchArmy)) _marchArmy = ready[0].Id;
-                int cw = Math.Max(80, (iw - gap * (ready.Count - 1)) / ready.Count);
-                for (int i = 0; i < ready.Count && i < 3; i++)
-                    if (ui.Chip(new Rectangle(x + i * (cw + gap), y, cw, h - 6), ready[i].Name + " · " + ready[i].Strength, _marchArmy == ready[i].Id)) _marchArmy = ready[i].Id;
-                y += h + 2;
-            }
+            // Qamal: shahardagi o'z jangchilaringiz bilan (server qo'shini shart emas)
+            int local = LocalArmyCount?.Invoke() ?? 0;
+            Row("Shahringizdagi qo'shin: " + local + " jangchi", local >= WarRules.MinBattleArmy ? T.TextPrimary : T.Warning);
+            if (!string.IsNullOrEmpty(r.RulerName)) Row("Saroyda: shoh " + r.RulerName + " va vaziri", T.TextSecondary);
+            string why = !r.CanSiege ? r.BlockReasonUz
+                : _siegeTarget != null ? "Qo'shiningiz yo'lda: " + _siegeTarget.Name + " (" + (int)Math.Max(0, (_siegeArrive - DateTime.UtcNow).TotalSeconds) + " s)"
+                : local < WarRules.MinBattleArmy ? "Shahringizda kamida " + WarRules.MinBattleArmy + " jangchi bo'lsin (hozir " + local + "). DIAGNOSTIKA → QO'SHIN bo'limida yollang."
+                : "";
+            bool canGo = r.CanSiege && _siegeTarget == null && local >= WarRules.MinBattleArmy && !_client.WarBusy;
             int by = info.Bottom - h - 12;
-            if (!r.CanMarch) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, by - (int)(lh * 2 + 8), iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.Warning, 2);
-            if (ui.Button(new Rectangle(x, by, iw, h), r.CanMarch ? "YURISH BOSHLASH" : "Yurish mumkin emas", ButtonKind.Danger, r.CanMarch && ready.Count > 0 && !_client.WarBusy, "Qo'shin yo'lga chiqadi; yetib borgach jang boshlanadi"))
-                _client.March(_marchArmy, r.RegionId);
+            if (why.Length > 0) ui.Paragraph(why, new Rectangle(x, by - (int)(lh * 2 + 8), iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.Warning, 2);
+            if (ui.Button(new Rectangle(x, by, iw, h), canGo ? "YURISH BOSHLASH" : "Yurish mumkin emas", ButtonKind.Danger, canGo, "Qo'shin yo'lga chiqadi; yetib borgach shahar ichida jang, saroyda shoh va vazir"))
+                BeginSiegeMarch(r, w.MapRegions.Where(m => m.IsMine).OrderByDescending(m => m.IsCapital).FirstOrDefault());
         }
     }
 }
