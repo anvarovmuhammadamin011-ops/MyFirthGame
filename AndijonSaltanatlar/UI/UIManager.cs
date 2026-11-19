@@ -42,7 +42,7 @@ namespace AndijonSaltanatlar.UI
         private int SmallBtn => Touch ? 30 : 22;
         private const int PanelW = 248;
 
-        private enum Tab { None, Build, City, Population, Army, State, Civ, Settings, Diag, Farm, World, Mission, Beautify }
+        private enum Tab { None, Build, City, Population, Army, State, Civ, Settings, Diag, Farm, World, Mission, Beautify, Find }
 
         private readonly AssetManager _assets;
         private readonly PixelFont _font;
@@ -65,6 +65,8 @@ namespace AndijonSaltanatlar.UI
         public bool OpenMissionsRequested;
         /// <summary>BEZASH bosildi (Game1 shaharni rang-barang bezaklar bilan bezaydi).</summary>
         public bool BeautifyRequested;
+        /// <summary>TOPISH bosildi (Game1 keyingi binoga kamerani markazlaydi).</summary>
+        public bool FindNextRequested;
         /// <summary>Katta oyna ochiq (DIAGNOSTIKA, VAQT, murojaat, vazir...) — missiya kartasi ko'rsatilmaydi.</summary>
         public bool BlocksTracker => _tab == Tab.Diag || TimePanelOpen || FarmRequestOpen || PetitionOpen || AdvisorOpen || (_governorPanel?.IsOpen ?? false);
         public bool AdvisorOpen;
@@ -142,6 +144,7 @@ namespace AndijonSaltanatlar.UI
                 ("FERMERLIK", Tab.Farm),
                 ("MISSIYA", Tab.Mission),
                 ("BEZASH", Tab.Beautify),
+                ("TOPISH", Tab.Find),
                 (Texts.TabCivilization, Tab.Civ),
                 ("DUNYO", Tab.World),
                 (Texts.TabSettings, Tab.Settings),
@@ -411,6 +414,7 @@ namespace AndijonSaltanatlar.UI
                     if (t == Tab.World) { OpenWorldRequested = true; return; } // saltanat xaritasi (to'liq ekran)
                     if (t == Tab.Mission) { OpenMissionsRequested = true; return; } // MISSIYALAR ro'yxati (to'liq ekran)
                     if (t == Tab.Beautify) { BeautifyRequested = true; return; } // shaharni rang-barang bezaklar bilan bezash
+                    if (t == Tab.Find) { FindNextRequested = true; return; } // binoni topib, kamera o'sha joyga boradi
                     if (_tab == t) { _tab = Tab.None; if (t == Tab.Build) _state.CancelBuild(); }
                     else _tab = t;
                     return;

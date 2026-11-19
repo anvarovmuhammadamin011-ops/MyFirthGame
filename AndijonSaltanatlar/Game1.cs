@@ -1682,6 +1682,11 @@ public sealed class Game1 : Game
 				int added = World.CityBeautifier.Beautify(_map, _buildings, new Random());
 				_state.ShowMessage(added > 0 ? "Shahar bezatildi — " + added + " ta bezak qo'shildi" : "Bezash uchun bo'sh joy topilmadi");
 			}
+			if (_ui.FindNextRequested)
+			{
+				_ui.FindNextRequested = false;
+				FindNextBuilding();
+			}
 			if (_ui.OpenWorldRequested)
 			{
 				_ui.OpenWorldRequested = false;
@@ -2685,6 +2690,26 @@ public sealed class Game1 : Game
 		BeginLegacyUi(out Point v);
 		_vizierPopup.Draw(_sb, v.X, v.Y);
 		_sb.End();
+	}
+
+	private int _findIndex = -1;
+
+	/// <summary>TOPISH: keyingi binoga kamerani markazlaydi. Bino tanlangan bo'lsa — shu turdagilarni aylanadi.</summary>
+	private void FindNextBuilding()
+	{
+		var all = _buildings.Buildings;
+		if (all == null || all.Count == 0) { _state.ShowMessage("Hali bino yo'q", true); return; }
+		BuildingType? filter = _state.Selected is Building sel ? sel.Type : (BuildingType?)null;
+		var list = new System.Collections.Generic.List<Building>();
+		foreach (Building b in all) if (filter == null || b.Type == filter) list.Add(b);
+		if (list.Count == 0) { _state.ShowMessage("Bunday bino topilmadi", true); return; }
+		list.Sort((a, b) => (a.Position.Y * 1000 + a.Position.X).CompareTo(b.Position.Y * 1000 + b.Position.X));
+		_findIndex = (_findIndex + 1) % list.Count;
+		Building t = list[_findIndex];
+		Vector2 center = IsoMath.TileToWorld(t.Position.X + (t.Size.X - 1) / 2f, t.Position.Y + (t.Size.Y - 1) / 2f);
+		_camera.Jump(center, Math.Max(_camera.Zoom, 1.2f));
+		_state.Select(t);
+		_state.ShowMessage(t.Name + "  (" + (_findIndex + 1) + "/" + list.Count + ")" + (filter != null ? " — shu turdagilar" : ""));
 	}
 
 	private void DrawOnline()
