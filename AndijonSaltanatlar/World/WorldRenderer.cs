@@ -130,6 +130,26 @@ namespace AndijonSaltanatlar.World
                             float rip = (_time * 0.8f + cu.PerEntityPhaseOffset) % 1f;
                             DrawRing(sb, at, 9f + rip * 9f, new Color(220, 240, 255) * (0.55f * (1f - rip)));
                             DrawRing(sb, at, 7f, new Color(200, 230, 255) * 0.45f);
+                            if (depth == 2)
+                            {
+                                // SUZISH animatsiyasi: navbatma-navbat qo'l urishi (splash) va orqada iz (wake)
+                                float stroke = _time * 3.6f + cu.PerEntityPhaseOffset;
+                                float strokeAmt = MathF.Abs(MathF.Sin(stroke));
+                                float sideSign = MathF.Sin(stroke * 0.5f) > 0 ? 1f : -1f;
+                                int facing = fx == SpriteEffects.FlipHorizontally ? -1 : 1;
+                                Vector2 hand = at + new Vector2(facing * 6f + sideSign * 3f, -3f - strokeAmt * 3f);
+                                float ha = 0.35f + 0.45f * strokeAmt;
+                                sb.Draw(_assets.Pixel, new Rectangle((int)hand.X - 2, (int)hand.Y, 5, 2), new Color(232, 246, 255) * ha);
+                                sb.Draw(_assets.Pixel, new Rectangle((int)hand.X, (int)hand.Y - 2, 2, 2), Color.White * (ha * 0.8f));
+                                // orqadagi iz (wake)
+                                for (int w = 0; w < 3; w++)
+                                {
+                                    float wa = 0.3f * (1f - w / 3f);
+                                    int wx = (int)(at.X - facing * (4 + w * 3));
+                                    sb.Draw(_assets.Pixel, new Rectangle(wx - 2, (int)at.Y + 1 + w, 2, 1), new Color(210, 235, 250) * wa);
+                                    sb.Draw(_assets.Pixel, new Rectangle(wx + 1, (int)at.Y + 2 + w, 2, 1), new Color(210, 235, 250) * wa);
+                                }
+                            }
                         }
                         else
                         sb.Draw(o.Texture, at, null, tint, rot + hrot, origin, new Vector2(k, sy * k), fx, 0f);
