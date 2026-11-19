@@ -158,7 +158,8 @@ namespace AndijonSaltanatlar.World
                 if (bb != null && bb.Level >= 2 && bb.BuildProgress >= 1f)
                 {
                     string lk = AssetManager.LevelKey(bb.SpriteKey, System.Math.Min(bb.Level, AssetManager.MaxArtLevel));
-                    int st = AssetManager.StyleOf(bb.Position);
+                    // Upgrade uslubi: har binoning tasodifiy Variant'i + joyi — bir xil binolar har xil bezaladi (gumbaz, minora, bayroq, chiroq).
+                    int st = ((bb.Variant * 3 + AssetManager.StyleOf(bb.Position)) % AssetManager.Styles + AssetManager.Styles) % AssetManager.Styles;
                     Texture2D lt = (st > 0 ? _assets.TryGet(lk + "_s" + st) : null) ?? _assets.TryGet(lk);
                     if (lt != null) { tex = lt; pos = WorldObjectExtensions.AnchorBottomCenter(lt, bb.Position, bb.Size.X); }
                 }

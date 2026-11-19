@@ -69,8 +69,9 @@ namespace AndijonSaltanatlar.Buildings
             SetHover(IsoMath.WorldToTile(camera.ScreenToWorld(input.MouseVector)));
 
             bool click = input.LeftPressed;
-            // Devorni sudrab ketma-ket qurish
-            bool drag = _ghost.Type == BuildingType.Wall && input.LeftDown && Origin != _lastPlaced && IsValid;
+            // Ketma-ket ko'p qurish: tugmani bosib turib yangi katakka o'tsangiz — yana quriladi
+            // (devor avvaldan shunday edi; endi barcha binolar uchun — har safar menyudan tanlash shart emas).
+            bool drag = input.LeftDown && Origin != _lastPlaced && IsValid;
             if (click || drag) TryPlace(click);
         }
 
