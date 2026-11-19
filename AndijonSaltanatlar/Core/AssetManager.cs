@@ -293,6 +293,9 @@ namespace AndijonSaltanatlar.Core
         /// <summary>Rasmni chizish masshtabi: oddiy — 1, 3D modeldan olingan aniq rasm — 1/HR.</summary>
         public static float ScaleOf(Texture2D t) => t != null && HiRes.Contains(t) ? 1f / HR : 1f;
 
+        /// <summary>Odamlar (fuqaro, askar, shoh) chizilish masshtabi — real odamlarga nisbatan biroz kichikroq.</summary>
+        public const float UnitScale = 0.88f;
+
         /// <summary>Oyoq nuqtasi rasm pastidan necha piksel yuqorida (rasm o'z piksellarida).</summary>
         public static float FootOf(Texture2D t) => UnitArt.FootOffset / ScaleOf(t);
 

@@ -29,12 +29,16 @@ namespace AndijonSaltanatlar.Environment
             switch (Current)
             {
                 case Season.Bahor:
-                    return t == TileType.Grass ? new Color(176, 255, 156) : Color.White;
+                    // Bahor: yam-yashil, nam o't
+                    return t == TileType.Grass ? new Color(150, 216, 128) : Color.White;
                 case Season.Yoz:
-                    return t == TileType.Grass ? new Color(250, 238, 168) : t == TileType.Ground ? new Color(255, 240, 206) : Color.White;
+                    // Yoz: to'q, quyoshda pishgan yashil (sarg'ish emas), tuproq biroz iliq
+                    return t == TileType.Grass ? new Color(170, 205, 120) : t == TileType.Ground ? new Color(246, 230, 196) : Color.White;
                 case Season.Kuz:
-                    return t == TileType.Grass ? new Color(255, 196, 96) : t == TileType.Ground ? new Color(240, 214, 170) : Color.White;
+                    // Kuz: oltin-sarg'ish, qurigan o't
+                    return t == TileType.Grass ? new Color(224, 190, 112) : t == TileType.Ground ? new Color(234, 210, 168) : Color.White;
                 default:
+                    // Qish: hamma joy oppoq-ko'kimtir, muz
                     return t == TileType.Water ? new Color(196, 222, 246) : new Color(226, 234, 248);
             }
         }
@@ -63,9 +67,10 @@ namespace AndijonSaltanatlar.Environment
             switch (Current)
             {
                 case Season.Bahor:
-                    return t == DecorationType.TreeApricot ? new Color(255, 214, 230) : new Color(210, 255, 196);
+                    return t == DecorationType.TreeApricot ? new Color(255, 214, 230) : new Color(188, 240, 170);
                 case Season.Yoz:
-                    return new Color(236, 246, 196);
+                    // Yoz: to'q, quyuq yashil barglar
+                    return new Color(150, 198, 120);
                 case Season.Kuz:
                     // har daraxt biroz boshqacha: sariq, to'q sariq, qizg'ish
                     int k = (seed * 7919) & 3;

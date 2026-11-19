@@ -80,8 +80,11 @@ namespace AndijonSaltanatlar.World
                     tint *= cu.FadeAlpha;
                     SpriteEffects fx = o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
                     Vector2 feet = IsoMath.TileToWorld(cu.Position);
+                    // Yurganda tananing yengil ko'tarilib-tushishi (haqiqiy qadam hissi) — har kadr emas, qadam ritmida.
+                    if (cu.State == AndijonSaltanatlar.Units.UnitState.Walking && !cu.IsDown)
+                        feet.Y -= MathF.Abs(MathF.Sin(_time * 6.2f + cu.PerEntityPhaseOffset)) * 1.3f;
                     var origin = new Vector2(o.Texture.Width / 2f, o.Texture.Height - AssetManager.FootOf(o.Texture));
-                    float k = AssetManager.ScaleOf(o.Texture);
+                    float k = AssetManager.ScaleOf(o.Texture) * AssetManager.UnitScale;
                     if (cu.IsDown)
                     {
                         // Yiqilish: tezlashib qulaydi, yerga tushib biroz sakraydi, keyin xira yotadi
@@ -123,9 +126,9 @@ namespace AndijonSaltanatlar.World
                         // Yelkadagi narsa (hosil qopi)
                         if (cu.CarryKey != null && _assets.TryGet(cu.CarryKey) is Texture2D carry)
                         {
-                            float ck = AssetManager.ScaleOf(carry);
+                            float ck = AssetManager.ScaleOf(carry) * AssetManager.UnitScale;
                             float side = o.Flipped ? 5f : -5f;
-                            sb.Draw(carry, at + new Vector2(side, -30f + sinkNow), null, Color.White, 0f, new Vector2(carry.Width / 2f, carry.Height), ck, fx, 0f);
+                            sb.Draw(carry, at + new Vector2(side, -30f * AssetManager.UnitScale + sinkNow), null, Color.White, 0f, new Vector2(carry.Width / 2f, carry.Height), ck, fx, 0f);
                         }
                         // Sug'orish: ekin ustiga suv tomchilari
                         if (cu.Watering)
@@ -226,8 +229,9 @@ namespace AndijonSaltanatlar.World
             Vector2 size = _font.Measure(citizen.RoleLabel, 1, 0);
             int width = (int)size.X + 6;
             int height = (int)size.Y + 4;
+            float headDrop = unit.Texture.Height * AssetManager.ScaleOf(unit.Texture) * (1f - AssetManager.UnitScale);
             int x = (int)MathF.Round(unit.DrawPosition.X + unit.Texture.Width * AssetManager.ScaleOf(unit.Texture) / 2f - width / 2f);
-            int y = (int)MathF.Round(unit.DrawPosition.Y - height - 2);
+            int y = (int)MathF.Round(unit.DrawPosition.Y + headDrop - height - 2);
             sb.Draw(_assets.Pixel, new Rectangle(x, y, width, height), new Color(12, 35, 22, 220));
             _font.Draw(sb, citizen.RoleLabel, new Vector2(x + 3, y + 2), new Color(130, 245, 145), 1, 0);
         }
@@ -261,8 +265,9 @@ namespace AndijonSaltanatlar.World
             Vector2 size = _font.Measure(citizen.SpeechText, 1, 0);
             int width = (int)size.X + 8;
             int height = (int)size.Y + 6;
+            float headDrop = unit.Texture.Height * AssetManager.ScaleOf(unit.Texture) * (1f - AssetManager.UnitScale);
             int x = (int)MathF.Round(unit.DrawPosition.X + unit.Texture.Width * AssetManager.ScaleOf(unit.Texture) / 2f - width / 2f);
-            int y = (int)MathF.Round(unit.DrawPosition.Y - height - _font.Measure(citizen.RoleLabel, 1, 0).Y - 6);
+            int y = (int)MathF.Round(unit.DrawPosition.Y + headDrop - height - _font.Measure(citizen.RoleLabel, 1, 0).Y - 6);
             var box = new Rectangle(x, y, width, height);
             sb.Draw(_assets.Pixel, box, new Color(246, 230, 184));
             sb.Draw(_assets.Pixel, new Rectangle(x, y, width, 1), new Color(83, 54, 35));

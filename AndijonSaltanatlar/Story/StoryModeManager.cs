@@ -97,18 +97,21 @@ namespace AndijonSaltanatlar.Story
             }
         }
 
-        // ---- Vazir integratsiyasi (ad-hoc dialog orqali ko'rsatiladi) ----
+        // ---- Vazir integratsiyasi: yangi vazifa yoki muhim voqeada Vazir ekranda paydo bo'lib aytadi ----
         private void VazirExplain(QuestDefinition q)
         {
-            if (!StoryModeActive || q == null) return;
-            if (!string.IsNullOrEmpty(q.IntroDialogueId) && Dialogue.Has(q.IntroDialogueId))
-                return; // kirish dialogi alohida ko'rsatiladi
+            if (q == null) return;
+            // Yangi vazifa ochildi — Vazir tushuntiradi (Story va Erkin rejimda ham).
+            string body = string.IsNullOrWhiteSpace(q.DescriptionUz)
+                ? "Hazratim, yangi vazifa paydo bo'ldi: " + q.TitleUz
+                : q.DescriptionUz;
+            _game?.ShowVizier("Yangi vazifa: " + q.TitleUz, body);
         }
 
         private void VazirCongratulate(QuestDefinition q)
         {
             if (q == null) return;
-            _game?.ShowMessage("Vazifa bajarildi: " + q.TitleUz);
+            _game?.ShowVizier("Vazifa bajarildi", "Tabriklayman, hazratim! «" + q.TitleUz + "» vazifasi muvaffaqiyatli ado etildi.");
         }
 
         // ---- Hodisa e'lon qilish nuqtalari (GameStateManager chaqiradi) ----

@@ -152,6 +152,8 @@ public sealed class Game1 : Game
 
 	private StoryOverlay _storyOverlay;
 
+	private VizierPopup _vizierPopup;
+
 	private MainMenuScreen _mainMenu;
 
 	private bool _menuMode;
@@ -549,6 +551,7 @@ public sealed class Game1 : Game
 		_civ = new CivilizationView(_assets, _font, _state);
 		_quest = new QuestJournalView(_assets, _font, _state);
 		_storyOverlay = new StoryOverlay(_assets, _font, _state);
+		_vizierPopup = new VizierPopup(_assets, _font);
 	}
 
 	private void RunSmokeTest(string logPath)
@@ -1646,6 +1649,12 @@ public sealed class Game1 : Game
 			_input.PointerScale = us;
 			if (_storyOverlay != null) _storyOverlay.HideTracker = _ui.BlocksTracker;
 			_storyOverlay?.Update(_input, num, uv.X, uv.Y);
+			// Vazir ekran xabari (missiya/muhim voqea) — navbatni olib, ko'rsatamiz.
+			if (_vizierPopup != null)
+			{
+				while (_state.TryDequeueVizier(out string vzT, out string vzB)) _vizierPopup.Enqueue(vzT, vzB);
+				_vizierPopup.Update(num, _input, uv.X, uv.Y);
+			}
 			if (!inHouse) _ui.Update(_input, uv.X, uv.Y);
 			// Missiya kartasi ustidagi bosish orqadagi xaritaga o'tmasin
 			if (_storyOverlay != null && _storyOverlay.PointerOverTracker) _input.MouseOverUI = true;
@@ -2337,6 +2346,7 @@ public sealed class Game1 : Game
 			{
 				DrawUI();
 				DrawStoryOverlay();
+				DrawVizierPopup();
 				DrawOnline();
 			}
 		}
@@ -2661,6 +2671,14 @@ public sealed class Game1 : Game
 			_storyOverlay.Draw(_sb, v.X, v.Y);
 			_sb.End();
 		}
+	}
+
+	private void DrawVizierPopup()
+	{
+		if (_vizierPopup == null || !_vizierPopup.Active) return;
+		BeginLegacyUi(out Point v);
+		_vizierPopup.Draw(_sb, v.X, v.Y);
+		_sb.End();
 	}
 
 	private void DrawOnline()

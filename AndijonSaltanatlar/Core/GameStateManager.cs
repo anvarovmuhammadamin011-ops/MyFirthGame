@@ -170,6 +170,28 @@ public sealed class GameStateManager
 		MessageTimer = 2.5f;
 	}
 
+	// Vazir ekran xabari: missiya yoki muhim voqea yuz berganda Donishmand Vazir ekranda paydo bo'lib aytadi.
+	private readonly System.Collections.Generic.Queue<(string Title, string Body)> _vizierQueue = new System.Collections.Generic.Queue<(string, string)>();
+
+	/// <summary>Vazirni ekranga chaqiradi (Game1 navbatni VizierPopup'ga uzatadi). Takroriy bir xil xabar o'tkazilmaydi.</summary>
+	public void ShowVizier(string title, string body)
+	{
+		if (string.IsNullOrWhiteSpace(body)) return;
+		if (_vizierQueue.Count > 0)
+		{
+			var last = _vizierQueue.ToArray()[_vizierQueue.Count - 1];
+			if (last.Body == body) return;
+		}
+		_vizierQueue.Enqueue((string.IsNullOrWhiteSpace(title) ? "Donishmand Vazir" : title, body));
+	}
+
+	/// <summary>Navbatdagi Vazir xabarini oladi (Game1 har kadr chaqiradi).</summary>
+	public bool TryDequeueVizier(out string title, out string body)
+	{
+		if (_vizierQueue.Count > 0) { var m = _vizierQueue.Dequeue(); title = m.Title; body = m.Body; return true; }
+		title = null; body = null; return false;
+	}
+
 	public bool CanAfford(int cost)
 	{
 		return _resources.CanAfford(ResourceType.Coin, cost);
