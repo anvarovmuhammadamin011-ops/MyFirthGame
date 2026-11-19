@@ -7,7 +7,7 @@ namespace AndijonSaltanatlar.World
     public enum DecorationType
     {
         TreePoplar, TreeChinor, TreeApricot, TreeCypress, Bush, Flowers,
-        Stall, Hovuz, Well, Brazier, Banner, Crates, Dummy, WeaponRack, Tandir, Sori
+        Stall, Hovuz, Well, Brazier, Banner, Crates, Dummy, WeaponRack, Tandir, Sori, Bell
     }
 
     /// <summary>
@@ -89,6 +89,9 @@ namespace AndijonSaltanatlar.World
                 case DecorationType.Sori:
                     Name = "So‘ri"; SpriteKey = SpriteKeys.Sori;
                     Description = "Choyxona so‘risi — ko‘k choy va suhbat joyi."; break;
+                case DecorationType.Bell:
+                    Name = "Ogohlantirish qo‘ng‘irog‘i"; SpriteKey = SpriteKeys.Bell; BlocksMovement = false;
+                    Description = "Shahar markazidagi qo‘ng‘iroq — chalinsa, xalq uylariga kiradi."; break;
             }
         }
     }

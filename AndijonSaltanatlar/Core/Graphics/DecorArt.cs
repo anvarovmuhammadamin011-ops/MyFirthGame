@@ -246,6 +246,26 @@ namespace AndijonSaltanatlar.Core.Graphics
             return ic.C;
         }
 
+        /// <summary>Shahar markazidagi ogohlantirish qo'ng'irog'i: yog'och ramkaga osilgan bronza jom.</summary>
+        public static Canvas Bell()
+        {
+            var ic = new IsoCanvas(1, 50);
+            Vector2 g = ic.P(0.5f, 0.5f, 0);
+            ic.C.FillEllipse(g.X, g.Y + 1, 7, 3f, new Color(0, 0, 0, 55));
+            ic.Pole(0.3f, 0.5f, 0, 40, Pal.Wood, 2);
+            ic.Pole(0.7f, 0.5f, 0, 40, Pal.Wood, 2);
+            Vector2 top = ic.P(0.5f, 0.5f, 40);
+            ic.C.FillRect((int)g.X - 11, (int)top.Y - 2, 22, 3, Pal.Wood); // ko'ndalang
+            Color bronze = new Color(200, 152, 72), bronzeD = new Color(150, 110, 48);
+            int by = (int)top.Y + 3;
+            ic.C.FillRect((int)g.X - 1, by - 2, 2, 3, bronzeD); // osma ilgak
+            for (int i = 0; i < 7; i++) { int w = 3 + i; ic.C.FillRect((int)g.X - w, by + i * 2, w * 2, 2, (i & 1) == 0 ? bronze : bronzeD); }
+            ic.C.FillRect((int)g.X - 10, by + 14, 20, 2, bronzeD); // labi
+            ic.C.FillRect((int)g.X - 1, by + 16, 2, 3, bronzeD);   // tili
+            ic.C.Outline(Outline, 0.5f);
+            return ic.C;
+        }
+
         public static Canvas Crates()
         {
             var ic = new IsoCanvas(1, 22);

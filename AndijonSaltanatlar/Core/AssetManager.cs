@@ -39,6 +39,7 @@ namespace AndijonSaltanatlar.Core
         public const string Well = "decor_well";
         public const string Brazier = "decor_brazier";
         public const string Banner = "decor_banner";
+        public const string Bell = "decor_bell";
         public const string Crates = "decor_crates";
         public const string Dummy = "decor_dummy";
         public const string WeaponRack = "decor_weaponrack";
@@ -152,6 +153,7 @@ namespace AndijonSaltanatlar.Core
             Register(SpriteKeys.Well, DecorArt.Well);
             Register(SpriteKeys.Brazier, DecorArt.Brazier);
             Register(SpriteKeys.Banner, DecorArt.Banner);
+            Register(SpriteKeys.Bell, DecorArt.Bell);
             Register(SpriteKeys.Crates, DecorArt.Crates);
             Register(SpriteKeys.Dummy, DecorArt.Dummy);
             Register(SpriteKeys.WeaponRack, DecorArt.WeaponRack);

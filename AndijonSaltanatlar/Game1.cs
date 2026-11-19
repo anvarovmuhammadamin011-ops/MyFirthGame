@@ -79,6 +79,8 @@ public sealed class Game1 : Game
 	// Chorva: cho'ponlarning qo'y, echki va mollari (har kuni ko'payadi)
 	private LivestockSystem _livestock;
 
+	private AndijonSaltanatlar.World.CurfewController _curfew;
+
 	// Soliq g'alayoni: aholi solig'i 30%+ bo'lsa xalq saroy oldiga chiqib tosh otadi
 	private AndijonSaltanatlar.CityLife.TaxRiotSystem _taxRiot;
 
@@ -517,6 +519,7 @@ public sealed class Game1 : Game
 		_interior = new AndijonSaltanatlar.Interiors.HouseInterior(_assets, _map, _buildings, _state);
 		_birds = new BirdSystem(_assets, _map, _units);
 		_livestock = new LivestockSystem(_assets, _map, _units, _buildings);
+		_curfew = new AndijonSaltanatlar.World.CurfewController();
 		_taxRiot = new AndijonSaltanatlar.CityLife.TaxRiotSystem();
 		_announcedSeason = null;
 		_governor = new AIGovernorManager
@@ -1852,6 +1855,7 @@ public sealed class Game1 : Game
 		_renderer.Tick(dt);
 		_birds?.Update(dt, _dayNight.NightAmount, _combat.Possessed);
 		_livestock?.Update(dt);
+		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
 		_citizenSocial.Update(_units, dt);
 		_citizenLife?.Update(dt, _map, _buildings, _units, _state, _combat.Possessed);
 		_taxRiot?.SetEscortShield(_combat.EscortCount);
@@ -2135,6 +2139,11 @@ public sealed class Game1 : Game
 		if (_input.KeyPressed(Keys.B) && !_strategicMode && !_civMode && !_questMode)
 		{
 			_combat.TriggerRaid(manual: true);
+			return;
+		}
+		if (_input.KeyPressed(Keys.K) && !_strategicMode && !_civMode && !_questMode)
+		{
+			_curfew?.Ring(_state); // markaziy qo'ng'iroqni chalish — xalq uylariga kiradi
 			return;
 		}
 		if (_input.KeyPressed(Keys.O))
