@@ -107,6 +107,11 @@ public sealed class Game1 : Game
 	private StrategicView _strategic;
 	private ArenaController _arena;
 	private bool _arenaFromMap;
+
+	/// <summary>QAMAL: yurish yetib kelganda dushman shahrida real vaqt jangi.</summary>
+	private AndijonSaltanatlar.Combat.SiegeMode _siege;
+	private bool _siegeFromMap;
+	private bool _siegeTestPending;
 	private readonly FarmWorkController _farmWork = new FarmWorkController();
 	private readonly SwimController _swim = new SwimController();
 
@@ -269,7 +274,7 @@ public sealed class Game1 : Game
 			_onlinePanel.Close();
 			_worldSelect = null;
 			_fullUpgradeDone = false;
-			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit };
+			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
 			_loginMode = true;
 		};
 		_cloud.SaveConflict = OnCloudConflict;
@@ -333,7 +338,7 @@ public sealed class Game1 : Game
 		}
 		if (_opt.Arena)
 		{
-			if (_arena.Start() && _opt.ArenaFight) _arena.TestBeginFight(_opt.ArenaPossess);
+			_arena.Start();
 		}
 		if (_opt.Tab != null)
 		{
@@ -406,9 +411,10 @@ public sealed class Game1 : Game
 		if (_loginMode)
 		{
 			_cloud.TryResume(DefaultServer());
-			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl.Length > 0 ? _cloud.ServerUrl : DefaultServer()) { Ui = _uiKit };
+			_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl.Length > 0 ? _cloud.ServerUrl : DefaultServer()) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
 			if (_opt.AuthStage == "profile") _loginScreen.Mode = GoogleLoginScreen.Stage.Profile;
 			else if (_opt.AuthStage == "welcome") _loginScreen.Mode = GoogleLoginScreen.Stage.Welcome;
+			else if (_opt.AuthStage == "shah") _loginScreen.OpenShahSetup(false, null);
 		}
 		if (_opt.Online)
 		{
@@ -553,6 +559,8 @@ public sealed class Game1 : Game
 		}
 		_strategic = new StrategicView(_assets, _font, _state);
 		_arena = new ArenaController(_assets, _state);
+		_siege = new AndijonSaltanatlar.Combat.SiegeMode(_assets, _state, _font);
+		_siegeTestPending = _opt.SiegeRegion.HasValue;
 		_civ = new CivilizationView(_assets, _font, _state);
 		_quest = new QuestJournalView(_assets, _font, _state);
 		_storyOverlay = new StoryOverlay(_assets, _font, _state);
@@ -1210,9 +1218,19 @@ public sealed class Game1 : Game
 			_loginScreen.ContinueRequested = LoadCloudGame;
 			_loginScreen.ProfileDone = ShowWorldSelection;
 			_loginScreen.Mode = _cloud.NeedsProfile ? GoogleLoginScreen.Stage.Profile : GoogleLoginScreen.Stage.Welcome;
+			// Shohini hali sozlamagan o'yinchi — avval shoh qiyofasi (semiz/ingichka, bo'yi, ismi)
+			if (!_cloud.NeedsProfile && !ShahLook.Configured) _loginScreen.OpenShahSetup(false, _cloud.DisplayName);
 			return;
 		}
 		LoadCloudGame();
+	}
+
+	/// <summary>Shoh qiyofasi o'zgardi: shaharda yurgan shoh figurasiga darhol qo'llanadi.</summary>
+	private void RefreshShahLook()
+	{
+		if (_units == null) return;
+		foreach (Unit u in _units.Units)
+			if (u is ShahUnit sh && sh.Team == UnitTeam.Player) sh.BodyScale = ShahLook.Scale;
 	}
 
 	/// <summary>Yangi hukmdor: YANGI HUKMDOR → DUNYONI TANLASH → YURTNI TANLASH → o'yin.</summary>
@@ -1344,7 +1362,7 @@ public sealed class Game1 : Game
 		_worldSelect = null;
 		_fullUpgradeDone = false;
 		NewGame(_currentSeed);
-		_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit };
+		_loginScreen = new GoogleLoginScreen(_cloud, _cloud.ServerUrl) { Ui = _uiKit, ShahTexture = () => _assets.TryGet(SpriteKeys.UnitShah + "_0"), ShahChanged = RefreshShahLook };
 		_loginMode = true;
 	}
 
@@ -1576,6 +1594,28 @@ public sealed class Game1 : Game
 		{
 			_onlinePanel.ToggleWorldMap();   // M — xaritani yopish
 		}
+		if (_siegeTestPending && _siege != null && !_siege.Active && !_loginMode && !_menuMode && !_introMode)
+		{
+			_siegeTestPending = false;
+			if (_opt.TestArmy.HasValue)
+			{
+				var types = new[] { AndijonSaltanatlar.Military.UnitType.Qilichboz, AndijonSaltanatlar.Military.UnitType.Nayzador, AndijonSaltanatlar.Military.UnitType.Otliq, AndijonSaltanatlar.Military.UnitType.Qalqonchi, AndijonSaltanatlar.Military.UnitType.Piyoda };
+				for (int i = 0; i < _opt.TestArmy.Value; i++) _state.Military.Recruit(types[i % types.Length], 1, 2);
+			}
+			if (_siege.Start(_opt.SiegeRegion.Value, GraphicsDevice.Viewport))
+			{
+				if (_opt.SiegeWatch) _siege.Combat.Release(false);
+				_siegeFromMap = true;
+				_strategicMode = false;
+				if (_opt.SiegeShahDown) _siege.TestKillShah();
+			}
+		}
+		if (_siegeFromMap && !_siege.Active)
+		{
+			// Qamal tugadi — saltanat xaritasiga qaytamiz (natija xaritada ko'rinadi)
+			_siegeFromMap = false;
+			_strategicMode = true;
+		}
 		if (_arenaFromMap && !_arena.Active)
 		{
 			// Yurish jangi tugadi — saltanat xaritasiga qaytamiz
@@ -1586,10 +1626,15 @@ public sealed class Game1 : Game
 		{
 			// O'yin dunyosi orqada yashashda davom etadi (pastdagi simulyatsiya), lekin bosishlar panelga tegishli.
 		}
+		else if (_siege.Active)
+		{
+			// Qamal: dushman shahri — kiritish to'liq qamalga tegishli
+			_siege.Update(_state.Paused ? 0f : num, _input, GraphicsDevice.Viewport);
+		}
 		else if (_arena.Active)
 		{
 			// Jang maydoni: tugmalar sahnaning o'zida (UiKit, Draw paytida) — bu yerda faqat Esc
-			if (_input.KeyPressed(Keys.Escape)) _arena.Escape();
+			if (_input.KeyPressed(Keys.Escape)) _arena.Close();
 		}
 		else if (_strategicMode)
 		{
@@ -1601,7 +1646,8 @@ public sealed class Game1 : Game
 			{
 				int rid = _strategic.MarchArrivedRegion;
 				_strategic.MarchArrivedRegion = -1;
-				if (_arena.StartCampaign(rid)) { _strategicMode = false; _arenaFromMap = true; }
+				// Yurish yetib keldi: qo'shin dushman SHAHRIGA kiradi (qamal)
+				if (_siege.Start(rid, GraphicsDevice.Viewport)) { _strategicMode = false; _siegeFromMap = true; }
 			}
 			if (_strategic.BackRequested)
 			{
@@ -1761,7 +1807,7 @@ public sealed class Game1 : Game
 		}
 		// Jang real vaqtda (o'yin tezligiga bog'liq emas), pauzada to'xtaydi.
 		// Kiritish faqat shahar ekranida va hech qanday panel/dialog ochiq bo'lmaganda beriladi.
-		bool combatInput = !onlineOpen && !_strategicMode && !_civMode && !_questMode && !_arena.Active
+		bool combatInput = !onlineOpen && !_strategicMode && !_civMode && !_questMode && !_arena.Active && !_siege.Active
 			&& !(_storyOverlay != null && _storyOverlay.DialogueOpen)
 			&& !(_ui.GovernorPanel != null && _ui.GovernorPanel.IsOpen);
 		bool wasInHouse = _interior.Active;
@@ -2117,6 +2163,7 @@ public sealed class Game1 : Game
 	{
 		// Jang maydoni (TABS) ochiq — klaviatura faqat jangga tegishli.
 		if (_arena != null && _arena.Active) return;
+		if (_siege != null && _siege.Active) return;
 		// Jangchi ichida: klaviatura to'liq jangchiga tegishli (boshqaruvni CombatSystem o'qiydi).
 		if (_combat.Possessed != null)
 		{
@@ -2341,7 +2388,13 @@ public sealed class Game1 : Game
 			renderTarget2D = new RenderTarget2D(GraphicsDevice, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
 			GraphicsDevice.SetRenderTarget(renderTarget2D);
 		}
-		if (_arena.Active)
+		if (_siege != null && _siege.Active)
+		{
+			Viewport vpS = GraphicsDevice.Viewport;
+			LegacyUiSize(out float siegeHud);
+			_siege.Draw(_sb, GraphicsDevice, vpS.Width, vpS.Height, siegeHud);
+		}
+		else if (_arena.Active)
 		{
 			GraphicsDevice.Clear(new Color(18, 20, 28));
 			Viewport vpA = GraphicsDevice.Viewport;

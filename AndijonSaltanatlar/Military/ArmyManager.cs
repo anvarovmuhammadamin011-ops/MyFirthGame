@@ -64,6 +64,14 @@ namespace AndijonSaltanatlar.Military
             return u;
         }
 
+        /// <summary>Darhol qo'shinga qo'shadi (masalan, qamalda shohi o'lgach tomonimizga o'tgan dushman askarlari).</summary>
+        public int Recruit(UnitType type, int count, int level = 1)
+        {
+            int n = 0;
+            for (; n < count; n++) AddUnit(type, System.Math.Clamp(level, 1, 3));
+            return n;
+        }
+
         public void Enqueue(UnitType type) => _recruit.Enqueue(type, OwnerKingdomId, HomeRegionId);
 
         /// <summary>Bir o'yin kunini qayta ishlaydi: tayyor jangchilar qo'shinga qo'shiladi. Soni qaytadi.</summary>

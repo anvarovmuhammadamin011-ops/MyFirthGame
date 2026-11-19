@@ -100,11 +100,17 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: jang maydoni (mashq jangi) darhol ochiladi.</summary>
 	public bool Arena;
 
-	/// <summary>Sinov: TABS jangni darhol boshlash (joylashtirishsiz).</summary>
-	public bool ArenaFight;
+	/// <summary>Sinov: shu hududga qamal darhol boshlanadi (-1 — birinchi dushman hududi).</summary>
+	public int? SiegeRegion;
 
-	/// <summary>Sinov: TABS jangda birinchi jangchi ichiga kirish.</summary>
-	public bool ArenaPossess;
+	/// <summary>Sinov: qamalda dushman shohi darhol yiqiladi (askarlar tomonga o'tadi).</summary>
+	public bool SiegeShahDown;
+
+	/// <summary>Sinov: qamalda hech kimning ichiga kirilmaydi (qo'shin o'zi jang qiladi).</summary>
+	public bool SiegeWatch;
+
+	/// <summary>Sinov: qamal oldidan qo'shinga shuncha aralash jangchi qo'shiladi.</summary>
+	public int? TestArmy;
 
 	/// <summary>Sinov: kirish ekrani bosqichi (login, profile, welcome) — skrinshot uchun.</summary>
 	public string AuthStage;
@@ -320,14 +326,19 @@ public sealed class LaunchOptions
 			case "--arena":
 				launchOptions.Arena = true;
 				break;
-			case "--arena-fight":
-				launchOptions.Arena = true;
-				launchOptions.ArenaFight = true;
+			case "--siege":
+				launchOptions.SiegeRegion = int.Parse(text, CultureInfo.InvariantCulture);
+				i++;
 				break;
-			case "--arena-possess":
-				launchOptions.Arena = true;
-				launchOptions.ArenaFight = true;
-				launchOptions.ArenaPossess = true;
+			case "--siege-watch":
+				launchOptions.SiegeWatch = true;
+				break;
+			case "--army":
+				launchOptions.TestArmy = int.Parse(text, CultureInfo.InvariantCulture);
+				i++;
+				break;
+			case "--siege-shah-down":
+				launchOptions.SiegeShahDown = true;
 				break;
 			case "--full-upgrade":
 				launchOptions.FullUpgrade = true;

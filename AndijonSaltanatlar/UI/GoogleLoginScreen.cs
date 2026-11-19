@@ -20,7 +20,7 @@ namespace AndijonSaltanatlar.UI
     /// </summary>
     public sealed class GoogleLoginScreen
     {
-        public enum Stage { Login, Profile, Welcome }
+        public enum Stage { Login, Profile, Welcome, Shah }
 
         private readonly CloudSession _cloud;
         private InputManager _input;
@@ -41,6 +41,15 @@ namespace AndijonSaltanatlar.UI
         public Action ContinueRequested;
         /// <summary>Profile: taxallus saqlandi.</summary>
         public Action ProfileDone;
+        /// <summary>Shoh qiyofasi oldindan ko'rinishi uchun sprite (Game1 beradi).</summary>
+        public Func<Texture2D> ShahTexture;
+
+        // --- SHOH QIYOFASI (yangi o'yinchi) ---
+        private string _shahName = "";
+        private int _shahBody = 1, _shahHeight = 1;
+        private bool _shahInit;
+        /// <summary>Shoh sozlangach: true — profil endi yaratildi (dunyo tanlashga o'tadi), false — Welcome'ga qaytadi.</summary>
+        private bool _shahThenProfileDone;
         private string _profileError;
         private bool _profileBusy;
 
@@ -67,7 +76,7 @@ namespace AndijonSaltanatlar.UI
             string kb = _pendingKeyboard;
             if (kb != null)
             {
-                if (Mode == Stage.Profile) _nick = kb; else _server = kb;
+                if (Mode == Stage.Profile) _nick = kb; else if (Mode == Stage.Shah) _shahName = kb; else _server = kb;
                 _pendingKeyboard = null;
             }
         }
@@ -85,6 +94,7 @@ namespace AndijonSaltanatlar.UI
             {
                 case Stage.Profile: DrawProfile(ui, sb, vw, vh, time, appear); break;
                 case Stage.Welcome: DrawWelcome(ui, sb, vw, vh, time, appear); break;
+                case Stage.Shah: DrawShah(ui, sb, vw, vh, time, appear); break;
                 default: DrawLogin(ui, sb, vw, vh, time, appear); break;
             }
             ui.End();
@@ -262,7 +272,7 @@ namespace AndijonSaltanatlar.UI
                 {
                     _profileBusy = false;
                     _profileError = e;
-                    if (e == null) ProfileDone?.Invoke();
+                    if (e == null) OpenShahSetup(true, clean);
                 });
             }
         }
@@ -274,7 +284,7 @@ namespace AndijonSaltanatlar.UI
             int h = ui.ControlH + (ui.IsTouch ? 10 : 12), gap = ui.Gap;
             int av = ui.IsTouch ? 72 : 64;
             float capH = ui.Type.LineHeight(TextStyle.Secondary), ph = ui.Type.LineHeight(TextStyle.PanelTitle);
-            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ph + capH) + av + 2 * h + 7 * gap + 50;
+            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ph + capH) + av + 3 * h + 8 * gap + 50;
             Rectangle card = Card(ui, vw, vh, ui.Compact ? 620 : 540, cardH, appear);
             int x = card.X + 28, w = card.Width - 56, y = card.Y + 22;
             Title(ui, sb, card, ref y, "XUSH KELIBSIZ!", null);
@@ -289,7 +299,7 @@ namespace AndijonSaltanatlar.UI
             ui.Type.DrawFitted(sb, _cloud.IsVip ? "VIP HUKMDOR · Barcha imkoniyatlar ochiq" : "Saltanatingiz sizni kutmoqda",
                 new Rectangle(x, y, w, (int)capH), TextStyle.Secondary, _cloud.IsVip ? Gold : T.TextSecondary, 1);
 
-            var go = new Rectangle(x, card.Bottom - 2 * h - gap - 12, w, h);
+            var go = new Rectangle(x, card.Bottom - 3 * h - 2 * gap - 2, w, h);
             if (Busy != null)
             {
                 ui.RoundedBorder(go, T.Border, T.SurfaceAlt, 8);
@@ -297,11 +307,112 @@ namespace AndijonSaltanatlar.UI
                 ui.Type.DrawFitted(sb, Busy + Dots(time), new Rectangle(go.X + 40, go.Y, go.Width - 48, go.Height), TextStyle.Button, T.TextPrimary, 1);
             }
             else if (ui.Button(go, "O'YINNI DAVOM ETTIRISH", ButtonKind.Primary, true)) ContinueRequested?.Invoke();
-            if (ui.Button(new Rectangle(x, go.Bottom + gap, w, h - 10), "BOSHQA HISOB BILAN KIRISH", ButtonKind.Ghost, Busy == null))
+            var shahBtn = new Rectangle(x, go.Bottom + gap, w, h - 10);
+            if (ui.Button(shahBtn, "SHOH QIYOFASI: " + AndijonSaltanatlar.Core.ShahLook.Name.ToUpperInvariant(), ButtonKind.Secondary, Busy == null))
+                OpenShahSetup(false, null);
+            if (ui.Button(new Rectangle(x, shahBtn.Bottom + gap, w, h - 10), "BOSHQA HISOB BILAN KIRISH", ButtonKind.Ghost, Busy == null))
             {
                 _cloud.SignOut();
                 Mode = Stage.Login;
             }
+        }
+
+        // ------------------------------------------------------------------ 4) SHOH QIYOFASI
+        /// <summary>Shoh qiyofasini sozlash bosqichini ochadi. afterProfile — yangi hisob (keyin dunyo tanlash).</summary>
+        public void OpenShahSetup(bool afterProfile, string suggestedName)
+        {
+            _shahThenProfileDone = afterProfile;
+            _shahInit = false;
+            if (!AndijonSaltanatlar.Core.ShahLook.Configured && !string.IsNullOrWhiteSpace(suggestedName)) _shahName = suggestedName;
+            Mode = Stage.Shah;
+        }
+
+        private void DrawShah(UiKit ui, SpriteBatch sb, int vw, int vh, float time, float appear)
+        {
+            if (!_shahInit)
+            {
+                _shahInit = true;
+                if (AndijonSaltanatlar.Core.ShahLook.Configured || string.IsNullOrWhiteSpace(_shahName)) _shahName = AndijonSaltanatlar.Core.ShahLook.Name;
+                _shahBody = AndijonSaltanatlar.Core.ShahLook.Body;
+                _shahHeight = AndijonSaltanatlar.Core.ShahLook.Height;
+            }
+            ThemeTokens T = ui.T;
+            int h = ui.ControlH + (ui.IsTouch ? 8 : 10), gap = ui.Gap;
+            float capH = ui.Type.LineHeight(TextStyle.Secondary);
+            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ui.Type.LineHeight(TextStyle.Body) + capH * 4) + 5 * h + 9 * gap + 70;
+            Rectangle card = Card(ui, vw, vh, ui.Compact ? 760 : 700, cardH, appear);
+            int x = card.X + 28, w = card.Width - 56, y = card.Y + 22;
+            Title(ui, sb, card, ref y, "SHOHINGIZNI YARATING", "Shohingiz shaharda, saroyda va jangda shunday ko'rinadi");
+            y += gap;
+
+            // Chapda — oldindan ko'rinish (sahna: zamin, soya, shoh)
+            int pw = Math.Min(w * 2 / 5, 260);
+            int bottomBtn = card.Bottom - h - 18;
+            var prev = new Rectangle(x, y, pw, Math.Max(120, bottomBtn - gap - y));
+            ui.RoundedBorder(prev, T.Border, new Color(30, 34, 44), 10);
+            ui.Fill(new Rectangle(prev.X + 2, prev.Y + prev.Height * 2 / 3, prev.Width - 4, prev.Height / 3 - 2), new Color(64, 54, 40));
+            Texture2D tex = ShahTexture?.Invoke();
+            if (tex != null)
+            {
+                Vector2 bs = AndijonSaltanatlar.Core.ShahLook.ScaleOf(_shahBody, _shahHeight);
+                float baseScale = prev.Height * 0.72f / Math.Max(1, tex.Height);
+                var feet = new Vector2(prev.Center.X, prev.Y + prev.Height * 0.86f);
+                float sh = tex.Width * baseScale * bs.X * 0.32f;
+                for (int k = 0; k < 4; k++) // yumaloq soya (ellips)
+                {
+                    float f = 1f - k * 0.22f;
+                    ui.Fill(new Rectangle((int)(feet.X - sh * f), (int)feet.Y - 4 + k, (int)(sh * 2 * f), 8 - 2 * k), new Color(0, 0, 0, 40));
+                }
+                float breathe = 1f + 0.012f * MathF.Sin(time * 2.2f);
+                sb.Draw(tex, feet, null, Color.White, 0f, new Vector2(tex.Width / 2f, tex.Height),
+                    new Vector2(baseScale * bs.X, baseScale * bs.Y * breathe), SpriteEffects.None, 0f);
+            }
+
+            // O'ngda — sozlamalar
+            int rx = prev.Right + gap * 2, rw = card.Right - 28 - rx, ry = y;
+            ui.Text("Shoh ismi", new Vector2(rx, ry), TextStyle.Secondary, T.TextSecondary);
+            ry += (int)capH + 4;
+            _shahName = ui.TextInput(new Rectangle(rx, ry, rw, h - 6), "shah_name", _shahName, "Masalan: Zahiriddin", false, AndroidShahKeyboard) ?? "";
+            if (_shahName.Length > AndijonSaltanatlar.Core.ShahLook.NameMax) _shahName = _shahName.Substring(0, AndijonSaltanatlar.Core.ShahLook.NameMax);
+            ry += h + gap;
+
+            ry = Choice(ui, "Tana tuzilishi", AndijonSaltanatlar.Core.ShahLook.BodyNames, ref _shahBody, rx, ry, rw, h, gap, capH);
+            ry = Choice(ui, "Bo'yi", AndijonSaltanatlar.Core.ShahLook.HeightNames, ref _shahHeight, rx, ry, rw, h, gap, capH);
+            ui.Paragraph("Keyin ham o'zgartirsa bo'ladi: kirish oynasida \"SHOH QIYOFASI\" tugmasi.",
+                new Rectangle(rx, ry, rw, (int)(capH * 4)), TextStyle.Caption, T.TextSecondary, 4);
+
+            var btn = new Rectangle(x, bottomBtn, w, h);
+            if (ui.Button(btn, "TAYYOR", ButtonKind.Primary, true))
+            {
+                AndijonSaltanatlar.Core.ShahLook.Set(_shahName, _shahBody, _shahHeight);
+                ShahChanged?.Invoke();
+                if (_shahThenProfileDone) ProfileDone?.Invoke();
+                else Mode = Stage.Welcome;
+            }
+        }
+
+        /// <summary>Shoh qiyofasi o'zgardi (Game1 shahardagi shoh figurasini yangilaydi).</summary>
+        public Action ShahChanged;
+
+        private static int Choice(UiKit ui, string label, string[] options, ref int value, int x, int y, int w, int h, int gap, float capH)
+        {
+            ui.Text(label, new Vector2(x, y), TextStyle.Secondary, ui.T.TextSecondary);
+            y += (int)capH + 4;
+            int n = options.Length, bw = (w - (n - 1) * gap) / n;
+            for (int i = 0; i < n; i++)
+            {
+                var r = new Rectangle(x + i * (bw + gap), y, bw, h - 8);
+                if (ui.Button(r, options[i].ToUpperInvariant(), i == value ? ButtonKind.Primary : ButtonKind.Secondary, true)) value = i;
+            }
+            return y + h + gap;
+        }
+
+        private void AndroidShahKeyboard()
+        {
+#if ANDROID
+            Task<string> t = KeyboardInput.Show("Shoh ismi", "1-18 harf", _shahName, false);
+            t.ContinueWith(r => { if (r.Status == TaskStatus.RanToCompletion && r.Result != null) _pendingKeyboard = r.Result; });
+#endif
         }
 
         // ------------------------------------------------------------------ yordamchilar

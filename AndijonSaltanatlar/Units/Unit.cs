@@ -132,6 +132,9 @@ namespace AndijonSaltanatlar.Units
 
         // --- Jang / boshqaruv (Combat tizimi) ---
         public UnitTeam Team { get; set; } = UnitTeam.Player;
+
+        /// <summary>Chizish masshtabi (X — tana kengligi, Y — bo'y). Shoh qiyofasi sozlanganda o'zgaradi.</summary>
+        public Vector2 BodyScale { get; set; } = Vector2.One;
         /// <summary>Unit yiqilgan (HP tugagan). Himoyachilar o'lmaydi — bosqin tugagach o'rnidan turadi.</summary>
         public bool IsDown => HitPoints <= 0;
         /// <summary>

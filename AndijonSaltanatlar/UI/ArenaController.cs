@@ -23,31 +23,8 @@ namespace AndijonSaltanatlar.UI
         private readonly AssetManager _assets;
         private readonly GameStateManager _state;
         private BattleScene _scene;
-        private TabsBattle _tabs;      // TABS uslubidagi real vaqt jang (mashq va hududga hujum)
         private float _lastTime = -1f;
         private int _seed;
-
-        private static Color ToColor(int[] c) => c != null && c.Length >= 3 ? new Color(c[0], c[1], c[2]) : Color.Gray;
-
-        private void SetupTabs(BattleDto b, float foeHpBonus)
-        {
-            _tabs ??= new TabsBattle(_assets, _state);
-            _tabs.Setup(b.AttackerGroups, b.DefenderGroups, ToColor(b.AttackerColor), ToColor(b.DefenderColor), b.AttackerName, b.DefenderName, foeHpBonus);
-        }
-
-        /// <summary>Sinov: joylashtirishsiz jangni boshlash (va ixtiyoriy — birinchi jangchi ichiga kirish).</summary>
-        public void TestBeginFight(bool possess)
-        {
-            _tabs?.BeginFight(possess);
-            if (Battle != null && Battle.Rounds.Count == 0) Battle.Rounds.Add(new BattleRoundDto { Round = 1, SummaryUz = "Jang boshlandi" });
-        }
-
-        /// <summary>Esc: jangchi ichida bo'lsa — chiqadi; aks holda sahna yopiladi.</summary>
-        public void Escape()
-        {
-            if (_tabs != null && _tabs.ReleasePossession()) return;
-            Close();
-        }
         private bool _rewarded;
         private int _defenseBonusPct;
 
@@ -119,7 +96,8 @@ namespace AndijonSaltanatlar.UI
             _rewarded = false;
             CampaignRegionId = -1;
             _defenseBonusPct = 0;
-            SetupTabs(Battle, 0f);
+            _scene ??= new BattleScene(_assets);
+            _scene.Reset();
             _lastTime = -1f;
             return true;
         }
@@ -168,7 +146,8 @@ namespace AndijonSaltanatlar.UI
             };
             CampaignRegionId = regionId;
             _rewarded = false;
-            SetupTabs(Battle, _defenseBonusPct / 100f);
+            _scene ??= new BattleScene(_assets);
+            _scene.Reset();
             _lastTime = -1f;
             return true;
         }
@@ -255,35 +234,20 @@ namespace AndijonSaltanatlar.UI
             _state.ShowMessage((win ? "G'alaba! " : b.Peace ? "Durang. " : "Mag'lubiyat. ") + (res?.TerritoryResult ?? ""), !win);
         }
 
-        /// <summary>
-        /// TABS uslubidagi real vaqt jangni chizadi va yuritadi. Jang tugagach natija (omon qolgan kuch ulushi)
-        /// BattleDto'ga yoziladi va mavjud mukofot/hudud mantiqi (Reward → FinishCampaign) qo'llanadi.
-        /// </summary>
+        /// <summary>Sahnani chizadi va tugmalarni qayta ishlaydi (UiKit — immediate-mode).</summary>
         public void Draw(UiKit ui, SpriteBatch sb, InputManager input, int vw, int vh, float time)
         {
             BattleDto b = Battle;
-            if (b == null || _tabs == null) return;
+            if (b == null) return;
             float dt = _lastTime < 0 ? 0f : Math.Clamp(time - _lastTime, 0f, 0.1f);
             _lastTime = time;
             ui.Begin(sb, input, vw, vh, time);
             ui.Fill(new Rectangle(0, 0, vw, vh), ui.T.Background);
-            TabsBattle.Action act = _tabs.Draw(ui, sb, input, vw, vh, dt, b.ResultUz);
+            BattleScene.Bind(sb);
+            BattleSceneAction act = _scene.Draw(ui, sb, b, vw, vh, dt, false);
             ui.End();
-
-            // Jang boshlandi — chekinish "mag'lubiyat" deb hisoblanishi uchun raund yozuvi
-            if (act == TabsBattle.Action.FightStarted && b.Rounds.Count == 0)
-                b.Rounds.Add(new BattleRoundDto { Round = 1, SummaryUz = "Jang boshlandi" });
-
-            if (_tabs.Finished && b.Status != BattleStatus.Completed)
-            {
-                b.AttackerPower = (int)Math.Round(b.AttackerStartPower * _tabs.MineSurvival);
-                b.DefenderPower = (int)Math.Round(b.DefenderStartPower * _tabs.FoeSurvival);
-                b.Status = BattleStatus.Completed;
-                b.Peace = _tabs.Winner == 0;
-                b.WinnerKingdomId = _tabs.Winner == 1 ? MeId : _tabs.Winner == 2 ? FoeId : 0;
-                Reward(b);
-            }
-            if (act == TabsBattle.Action.Close) Close();
+            if (act == BattleSceneAction.Decide) Resolve(_scene.SelectedDecision);
+            else if (act != BattleSceneAction.None) Close();
         }
     }
 }

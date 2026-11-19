@@ -86,8 +86,6 @@ namespace AndijonSaltanatlar.World
                     // Fuqarolar havo hissini ko'rsatadi: sovuqda ko'kimtir, issiqda qizargan
                     if (cu is CitizenUnit) tint = AndijonSaltanatlar.Environment.SeasonVisuals.CitizenTint(AndijonSaltanatlar.Environment.SeasonVisuals.CurrentComfort);
                     // Zarba yegan: qizarish asta so'nadi
-                    if (cu.HurtTimer > 0f) tint = Color.Lerp(tint, new Color(255, 116, 104), MathHelper.Clamp(cu.HurtTimer / 0.3f, 0f, 1f));
-                    tint *= cu.FadeAlpha;
                     SpriteEffects fx = o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
                     Vector2 feet = IsoMath.TileToWorld(cu.Position);
                     // Yurganda tananing yengil ko'tarilib-tushishi (haqiqiy qadam hissi) — har kadr emas, qadam ritmida.
@@ -95,6 +93,11 @@ namespace AndijonSaltanatlar.World
                         feet.Y -= MathF.Abs(MathF.Sin(_time * 6.2f + cu.PerEntityPhaseOffset)) * 1.3f;
                     var origin = new Vector2(o.Texture.Width / 2f, o.Texture.Height - AssetManager.FootOf(o.Texture));
                     float k = AssetManager.ScaleOf(o.Texture) * AssetManager.UnitScale;
+                    Vector2 body = cu.BodyScale; // shoh: semiz/ingichka, past/baland
+                    // Qamal: dushman jangchilari biroz qizg'ish (o'zimiznikidan ajralib turishi uchun)
+                    if (cu.Team == UnitTeam.Enemy && !(cu is RaiderUnit) && !(cu is CitizenUnit)) tint = new Color(255, 196, 182);
+                    if (cu.HurtTimer > 0f) tint = Color.Lerp(tint, new Color(255, 116, 104), MathHelper.Clamp(cu.HurtTimer / 0.3f, 0f, 1f));
+                    tint *= cu.FadeAlpha;
                     if (cu.IsDown)
                     {
                         // Yiqilish: tezlashib qulaydi, yerga tushib biroz sakraydi, keyin xira yotadi
@@ -102,9 +105,9 @@ namespace AndijonSaltanatlar.World
                         Color down = Color.Lerp(tint, new Color(150, 140, 135) * cu.FadeAlpha, lie);
                         float ang = cu.FallAngle * (o.Flipped ? -1f : 1f);
                         Vector2 at = new Vector2(MathF.Round(feet.X), MathF.Round(feet.Y)) + cu.HitDirWorld * 4f * lie;
-                        sb.Draw(o.Texture, at, null, down, ang, origin, k, fx, 0f);
+                        sb.Draw(o.Texture, at, null, down, ang, origin, k * body, fx, 0f);
                         if (cu.FlashTimer > 0f && _assets.FlashOf(o.Texture) is Texture2D wf)
-                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, ang, origin, k, fx, 0f);
+                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, ang, origin, k * body, fx, 0f);
                     }
                     else
                     {
@@ -152,7 +155,7 @@ namespace AndijonSaltanatlar.World
                             }
                         }
                         else
-                        sb.Draw(o.Texture, at, null, tint, rot + hrot, origin, new Vector2(k, sy * k), fx, 0f);
+                        sb.Draw(o.Texture, at, null, tint, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y), fx, 0f);
                         // Yelkadagi narsa (hosil qopi)
                         if (cu.CarryKey != null && _assets.TryGet(cu.CarryKey) is Texture2D carry)
                         {
@@ -171,7 +174,7 @@ namespace AndijonSaltanatlar.World
                             }
                         // Zarba tekkan lahza: oq chaqnash
                         if (cu.FlashTimer > 0f && _assets.FlashOf(o.Texture) is Texture2D wf)
-                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, rot + hrot, origin, new Vector2(k, sy * k), fx, 0f);
+                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y), fx, 0f);
                     }
                     if (cu is CitizenUnit citizen && !cu.IsDown)
                     {
