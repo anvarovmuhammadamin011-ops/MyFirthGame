@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AndijonSaltanatlar.Shared.DTOs;
 using AndijonSaltanatlar.UI.Design;
@@ -38,8 +39,13 @@ namespace AndijonSaltanatlar.UI
         {
             _dipMode = 3; _dipKingdomId = r.OwnerKingdomId; _dipKingdomName = r.OwnerName; _letterDraft = "";
         }
+        private void OpenTrade(WarMapRegionDto r)
+        {
+            _dipMode = 5; _dipKingdomId = r.OwnerKingdomId; _dipKingdomName = r.OwnerName;
+            _client.VisitCity(r.OwnerKingdomId); // nimalar bilan savdo qilishini ko'rsatish uchun snapshot
+        }
 
-        /// <summary>Qasr ma'lumot panelidagi uchta tugma (faqat boshqa o'yinchi/AI saltanati uchun).</summary>
+        /// <summary>Qasr ma'lumot panelidagi tugmalar (faqat boshqa o'yinchi/AI saltanati uchun): mehmon, savdo, sovg'a, xat.</summary>
         private int DrawDiplomacyRow(int x, int y, int iw, WarMapRegionDto r)
         {
             UiKit ui = _ui; int h = ui.ControlH, gap = ui.Gap;
@@ -47,7 +53,9 @@ namespace AndijonSaltanatlar.UI
             if (ui.Button(new Rectangle(x, y, bw, h), "MEHMON", ButtonKind.Secondary, !_client.VisitBusy, "Shaharni ochiq ko'rish")) OpenVisit(r);
             if (ui.Button(new Rectangle(x + bw + gap, y, bw, h), "SOVG'A", ButtonKind.Secondary, true, "Tanga yoki oziq-ovqat yuborish")) OpenGift(r);
             if (ui.Button(new Rectangle(x + 2 * (bw + gap), y, iw - 2 * (bw + gap), h), "XAT", ButtonKind.Secondary, true, "Xat yozish")) OpenLetter(r);
-            return y + h + gap;
+            // Savdo — alohida keng tugma (savdo xaritasi: davlat bilan savdo yo'li va taklif)
+            if (ui.Button(new Rectangle(x, y + h + gap, iw, h), "SAVDO YO'LI / TAKLIF", ButtonKind.Primary, !_client.VisitBusy, "Bu davlat bilan savdo qilish")) OpenTrade(r);
+            return y + 2 * (h + gap);
         }
 
         private void DrawDiplomacyOverlay(int vw, int vh)
@@ -59,6 +67,7 @@ namespace AndijonSaltanatlar.UI
                 case 2: DrawGiftModal(); break;
                 case 3: DrawLetterModal(); break;
                 case 4: DrawInboxModal(); break;
+                case 5: DrawTradeModal(); break;
             }
         }
 
@@ -215,6 +224,71 @@ namespace AndijonSaltanatlar.UI
                 ui.Type.DrawRight(_sbOf(), l.SentAt.ToLocalTime().ToString("dd.MM HH:mm"), new Vector2(r.Right - 12, r.Y + 10), TextStyle.Caption, T.TextSecondary);
                 ui.Paragraph(l.Text, new Rectangle(r.X + 16, r.Y + (int)lh + 10, r.Width - 28, ch - (int)lh - 18), TextStyle.Secondary, T.TextPrimary, 6);
             }
+        }
+
+        // ------------------------------------------------------------------ SAVDO (savdo yo'li va taklif)
+        private void DrawTradeModal()
+        {
+            UiKit ui = _ui; ThemeTokens T = ui.T;
+            CitySnapshotDto v = _client.Visit;
+            Rectangle m = ui.Modal(560, 520, "Savdo — " + _dipKingdomName);
+            int x = m.X + 20, w = m.Width - 40, y = m.Y + 64, h = ui.ControlH;
+            if (ui.IconButton(new Rectangle(m.Right - h - 8, m.Y + 10, h, h), "×", "Yopish")) { CloseDip(); return; }
+
+            if (v == null || v.KingdomId != _dipKingdomId)
+            {
+                ui.Paragraph(_client.VisitBusy ? "Savdo ma'lumoti yuklanmoqda…" : "Ma'lumot yo'q.", new Rectangle(x, y, w, 60), TextStyle.Body, T.TextSecondary);
+                return;
+            }
+            int lh = (int)ui.Type.LineHeight(TextStyle.Secondary);
+            ui.TextFit(v.RulerName + (v.IsAi ? " (sun'iy davlat)" : " (o'yinchi)"), new Rectangle(x, y, w, (int)ui.Type.LineHeight(TextStyle.PanelTitle)), TextStyle.PanelTitle);
+            y += (int)ui.Type.LineHeight(TextStyle.PanelTitle) + 8;
+
+            ui.TextFit("Bu saltanat nimalar bilan savdo qiladi:", new Rectangle(x, y, w, lh), TextStyle.Secondary, T.Accent);
+            y += lh + 4;
+            foreach (string g in TradeGoods(v)) { ui.TextFit("•  " + g, new Rectangle(x + 6, y, w - 6, lh), TextStyle.Secondary, T.TextPrimary); y += lh + 2; }
+            y += 10;
+
+            ui.Paragraph("Savdo taklifi yuboring — qabul qilsa, «Xatlar» orqali javob yozadi:", new Rectangle(x, y, w, lh * 2), TextStyle.Secondary, T.TextSecondary, 2);
+            y += lh * 2 + 4;
+            string[] proposals =
+            {
+                "Men tanga beraman — siz oziq-ovqat bering",
+                "Men oziq-ovqat beraman — siz tanga bering",
+                "Doimiy savdo yo'li ochaylik — o'zaro mahsulot almashaylik",
+            };
+            int by = m.Bottom - h - 16;
+            foreach (string p in proposals)
+            {
+                if (y + h > by) break;
+                if (ui.Button(new Rectangle(x, y, w, h), p, ButtonKind.Secondary, !_client.Busy))
+                {
+                    _client.SendLetter(_dipKingdomId, "SAVDO TAKLIFI: " + p + ". Rozimisiz?");
+                    CloseDip();
+                    return;
+                }
+                y += h + 6;
+            }
+            if (ui.Button(new Rectangle(x, by, w, h), "Yopish", ButtonKind.Ghost)) CloseDip();
+        }
+
+        /// <summary>Snapshot binolaridan saltanatning savdo mahsulotlari ro'yxati.</summary>
+        private static List<string> TradeGoods(CitySnapshotDto v)
+        {
+            var goods = new List<string>();
+            void Add(string s) { if (!goods.Contains(s)) goods.Add(s); }
+            foreach (CityBuildingDto b in v.Buildings)
+                switch (b.Type)
+                {
+                    case "Farm": Add("Guruch va oziq-ovqat"); break;
+                    case "Garden": Add("Meva va sabzavot"); break;
+                    case "Market": Add("Bozor mahsulotlari"); break;
+                    case "Caravanserai": Add("Karvon savdosi (uzoq yo'l)"); break;
+                    case "Madrasa": Add("Ilm va kitoblar"); break;
+                    case "Barracks": Add("Qurol-yarog'"); break;
+                }
+            if (goods.Count == 0) Add("Asosiy mahsulotlar");
+            return goods;
         }
 
         private void CloseDip() { _dipMode = 0; _client.CloseVisit(); _ui.FocusId = null; }
