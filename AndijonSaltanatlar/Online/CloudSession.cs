@@ -112,6 +112,73 @@ namespace AndijonSaltanatlar.Online
         /// </summary>
         public Func<string, Task<string>> NativeAccountPicker { get; set; }
 
+        /// <summary>
+        /// Serversiz Google kirish (telefon): server topilmadi — telefondagi akkaunt tanlanadi, ID tokendan ism va
+        /// identifikator olinadi (ism, email, sub). O'yin qurilmada saqlanadi.
+        /// </summary>
+        public Action<string, string, string> LocalGoogleSignedIn;
+        /// <summary>Server topilmadi va telefon akkaunt oynasi yo'q (kompyuter) — serversiz o'yin boshlanadi.</summary>
+        public Action ServerUnavailable;
+
+        /// <summary>Server javob beradimi (4 soniya ichida). Har qanday HTTP javob — ha; ulanib bo'lmasa — yo'q.</summary>
+        private async Task<bool> ServerReachableAsync(string url, CancellationToken ct)
+        {
+            try
+            {
+                using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                t.CancelAfter(TimeSpan.FromSeconds(4));
+                await Send(url, HttpMethod.Get, "api/auth/google/config", ct: t.Token);
+                return true;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
+            catch (HttpRequestException) { return false; }
+        }
+
+        /// <summary>Serversiz: telefondagi Google akkauntni tanlash va ID tokendan ism/identifikatorni o'qish.</summary>
+        private async Task LocalNativeLoginAsync(CancellationToken ct)
+        {
+            SetMessage("Server kerak emas — telefondagi Google akkauntni tanlang.", false);
+            string idToken;
+            try { idToken = await NativeAccountPicker(GoogleClient.WebClientId); }
+            catch (OperationCanceledException)
+            {
+                Post(() => { State = CloudLoginState.SignedOut; UsingNativePicker = false; Message = "Kirish bekor qilindi."; MessageIsError = false; });
+                return;
+            }
+            catch (Exception ex)
+            {
+                Post(() => { State = CloudLoginState.SignedOut; UsingNativePicker = false; Message = "Google akkaunt oynasi ochilmadi — SERVERSIZ O'YNASH tugmasini bosing." + Detail(ex); MessageIsError = true; });
+                return;
+            }
+            (string name, string email, string sub) = ReadIdToken(idToken);
+            Post(() =>
+            {
+                State = CloudLoginState.SignedOut; UsingNativePicker = false;
+                DisplayName = name; Message = "Xush kelibsiz, " + name + "!"; MessageIsError = false;
+                LocalGoogleSignedIn?.Invoke(name, email, sub);
+            });
+        }
+
+        /// <summary>Google ID token (JWT) ichidan ism, email va sub (imzo serversiz tekshirilmaydi — faqat profil uchun).</summary>
+        public static (string Name, string Email, string Sub) ReadIdToken(string jwt)
+        {
+            try
+            {
+                string[] parts = (jwt ?? "").Split('.');
+                if (parts.Length < 2) return ("Hukmdor", "", "google");
+                string b = parts[1].Replace('-', '+').Replace('_', '/');
+                b = b.PadRight(b.Length + (4 - b.Length % 4) % 4, '=');
+                using JsonDocument doc = JsonDocument.Parse(Convert.FromBase64String(b));
+                JsonElement root = doc.RootElement;
+                string Get(string k) => root.TryGetProperty(k, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+                string name = Get("given_name");
+                if (string.IsNullOrEmpty(name)) name = Get("name");
+                if (string.IsNullOrEmpty(name)) name = Get("email").Split('@')[0];
+                return (string.IsNullOrEmpty(name) ? "Hukmdor" : name, Get("email"), Get("sub"));
+            }
+            catch { return ("Hukmdor", "", "google"); }
+        }
+
         /// <summary>Hozir telefonning akkaunt tanlash oynasi ochiq (kirish ekrani matni uchun).</summary>
         public bool UsingNativePicker { get; private set; }
 
@@ -235,6 +302,13 @@ namespace AndijonSaltanatlar.Online
             {
                 try
                 {
+                    // 0) Server yo'q (yoki ulanib bo'lmaydi) — server kerak emas: telefon Google akkaunti bilan qurilmada o'ynash
+                    if (!await ServerReachableAsync(url, cts.Token))
+                    {
+                        if (NativeAccountPicker != null) { await LocalNativeLoginAsync(cts.Token); return; }
+                        Post(() => { State = CloudLoginState.SignedOut; UsingNativePicker = false; Message = "Server topilmadi — serversiz o'ynaysiz."; MessageIsError = false; ServerUnavailable?.Invoke(); });
+                        return;
+                    }
                     // 1) Telefon: tizimning Google akkaunt tanlash oynasi (telefondagi barcha akkauntlar).
                     if (NativeAccountPicker != null && await TryNativeLoginAsync(url, cts.Token)) return;
                     Post(() => UsingNativePicker = false);

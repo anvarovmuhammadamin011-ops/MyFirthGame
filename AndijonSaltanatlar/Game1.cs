@@ -160,6 +160,21 @@ public sealed class Game1 : Game
 	private float _autosaveTimer;
 	/// <summary>Serversiz rejim: o'yin faqat shu qurilmada saqlanadi (online imkoniyatlar yo'q).</summary>
 	private bool _offlinePlay;
+	/// <summary>Serversiz rejim saqlash fayli (Google akkaunti bo'lsa — har akkauntga alohida).</summary>
+	private string _offlineSave = SaveManager.DefaultPath;
+	private string _offlineProfile = "guest";
+	/// <summary>Serversiz dunyo: butun O'zbekiston, boshqa barcha davlatlar AI.</summary>
+	private AndijonSaltanatlar.Online.LocalWorld _localWorld;
+	private AndijonSaltanatlar.Shared.DTOs.WarOverviewDto _localOverview;
+	private bool _siegeLocalRun;
+	private string _localSiegeMessage;
+
+	private AndijonSaltanatlar.Online.LocalWorld LocalWorldNow()
+	{
+		if (_localWorld == null) _localWorld = AndijonSaltanatlar.Online.LocalWorld.Load(_offlineProfile);
+		_localWorld.PlayerName = string.IsNullOrEmpty(_ui?.AccountName) || _ui.AccountName == "Serversiz" ? GameConfig.CityName + " saltanati" : _ui.AccountName;
+		return _localWorld;
+	}
 	private bool _offlineTestPending;
 
 	/// <summary>Avtomatik saqlash oralig'i (soniya). Yer ochilganda darhol saqlanadi.</summary>
@@ -266,6 +281,7 @@ public sealed class Game1 : Game
 		_onlinePanel = new OnlinePanel(_assets, _font, _online, _uiKit);
 		_onlinePanel.LocalArmyCount = () => _state?.Military?.TotalUnits ?? 0;
 		_onlinePanel.SiegeDeparted = target => StartMarchOutParade(target.Name);
+		_onlinePanel.LocalWar = () => _localOverview ??= LocalWorldNow().BuildOverview();
 		_renderer = new WorldRenderer(_assets, _font);
 		_glow = BuildGlow();
 		_mainMenu = new MainMenuScreen(_assets, _font) { Ui = _uiKit };
@@ -275,6 +291,8 @@ public sealed class Game1 : Game
 		_cloud.BringToFront = BringGameWindowToFront; // login tugagach o'yin oynasi oldinga chiqadi
 		_cloud.NativeAccountPicker = NativeAccountPicker;
 		_cloud.SignedIn = OnCloudSignedIn;
+		_cloud.LocalGoogleSignedIn = (name, email, sub) => StartOfflineGame(string.IsNullOrEmpty(sub) ? "google" : "g" + sub, name, "Xush kelibsiz, " + name + "! O'yin shu telefonda saqlanadi, server kerak emas.");
+		_cloud.ServerUnavailable = () => StartOfflineGame(null, null, "Server topilmadi — serversiz o'ynaysiz. O'yin shu qurilmada saqlanadi.");
 		_cloud.TokenRenewed = t => _online.UpdateToken(t);
 		// Sessiya serverda bekor qilingan/muddati tugagan: kirish ekrani (lokal zaxira saqlangan, progress yo'qolmaydi)
 		_cloud.SessionLost = () =>
@@ -571,7 +589,16 @@ public sealed class Game1 : Game
 		_strategic = new StrategicView(_assets, _font, _state);
 		_arena = new ArenaController(_assets, _state);
 		_siege = new AndijonSaltanatlar.Combat.SiegeMode(_assets, _state, _font);
-		_siege.OnlineFinished = req => _online.SiegeFinish(req);
+		_siege.OnlineFinished = req =>
+		{
+			if (_siegeLocalRun)
+			{
+				// Serversiz dunyo: natija shu qurilmada — g'alabada qasr va bayroq sizniki
+				_localSiegeMessage = LocalWorldNow().ApplySiege(req);
+				_localOverview = null;
+			}
+			else _online.SiegeFinish(req);
+		};
 		_siegeTestPending = _opt.SiegeRegion.HasValue;
 		_civ = new CivilizationView(_assets, _font, _state);
 		_quest = new QuestJournalView(_assets, _font, _state);
@@ -1205,7 +1232,7 @@ public sealed class Game1 : Game
 			if (CloudSignedIn && !_loginMode && _state != null && _camera != null)
 				_cloud.UploadSaveBlocking(SaveManager.ToJson(BuildSave()));
 			else if (_offlinePlay && !_loginMode && _state != null && _camera != null)
-				SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+				SaveManager.Save(_offlineSave, BuildSave());
 		}
 		catch (Exception)
 		{
@@ -1216,17 +1243,24 @@ public sealed class Game1 : Game
 	public void SaveNowInBackground()
 	{
 		if (CloudSignedIn && !_loginMode && _state != null && _camera != null) UploadNow(showMessage: false);
-		else if (_offlinePlay && !_loginMode && _state != null && _camera != null) SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+		else if (_offlinePlay && !_loginMode && _state != null && _camera != null) SaveManager.Save(_offlineSave, BuildSave());
 	}
 
 	/// <summary>SERVERSIZ O'YNASH: qurilmadagi saqlangan o'yin (bo'lmasa yangi saltanat). Online xarita o'rniga M — saltanat xaritasi.</summary>
-	private void StartOfflineGame()
+	private void StartOfflineGame() => StartOfflineGame(null, null, null);
+
+	/// <param name="profile">Akkaunt kaliti (Google sub) — saqlash va dunyo har akkauntga alohida; null — mehmon.</param>
+	private void StartOfflineGame(string profile, string displayName, string welcome)
 	{
 		_offlinePlay = true;
-		SaveGameData data = SaveManager.Load(SaveManager.DefaultPath);
+		_offlineProfile = string.IsNullOrEmpty(profile) ? "guest" : profile;
+		_offlineSave = string.IsNullOrEmpty(profile) ? SaveManager.DefaultPath : AppPaths.File("save_" + new string(profile.Where(char.IsLetterOrDigit).Take(40).ToArray()) + ".json");
+		_localWorld = null;
+		_localOverview = null;
+		SaveGameData data = SaveManager.Load(_offlineSave);
 		if (data != null)
 		{
-			ApplySave(data, "Serversiz rejim: saltanat qolgan joyidan davom etmoqda");
+			ApplySave(data, welcome ?? "Serversiz rejim: saltanat qolgan joyidan davom etmoqda");
 		}
 		else
 		{
@@ -1236,12 +1270,14 @@ public sealed class Game1 : Game
 			_camera.Jump(IsoMath.TileToWorld(new Vector2(GameConfig.CityCenter, GameConfig.CityCenter)), StartZoom());
 			_state.ShowMessage("Serversiz rejim: yangi saltanat boshlandi. O'yin shu qurilmada saqlanadi");
 		}
-		_ui.AccountName = "Serversiz";
+		_ui.AccountName = string.IsNullOrEmpty(displayName) ? "Serversiz" : displayName;
+		if (data == null && welcome != null) _state.ShowMessage(welcome);
+		if (_opt.Map) { _strategicMode = false; _onlinePanel.OpenLocalWorldMap(); } // sinov: serversiz xarita
 		_loginMode = false;
 		_menuMode = false;
 		_frames = 0;
 		_autosaveTimer = 0f;
-		SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+		SaveManager.Save(_offlineSave, BuildSave());
 	}
 
 	/// <summary>Google orqali kirildi: serverdagi saltanatni yuklaymiz (yo'q bo'lsa yangi saltanat).</summary>
@@ -1719,6 +1755,7 @@ public sealed class Game1 : Game
 		{
 			var target = _onlinePanel.SiegeArrived;
 			_onlinePanel.SiegeArrived = null;
+			_siegeLocalRun = _onlinePanel.SiegeArrivedLocal;
 			if (_onlinePanel.IsOpen) _onlinePanel.Close();
 			if (_interior != null && _interior.Active) _interior.Exit();
 			if (_combat != null && _combat.Possessed != null) _combat.Release(false);
@@ -1729,7 +1766,14 @@ public sealed class Game1 : Game
 		{
 			// Qamal tugadi — xaritaga qaytamiz (natija va yangi bayroq xaritada ko'rinadi)
 			_siegeFromMap = false;
-			if (_siegeOnline) { _siegeOnline = false; if (!_onlinePanel.IsOpen) _onlinePanel.ToggleWorldMap(); }
+			if (_siegeOnline && _siegeLocalRun)
+			{
+				_siegeOnline = false;
+				if (!_onlinePanel.IsOpen) _onlinePanel.OpenLocalWorldMap();
+				if (!string.IsNullOrEmpty(_localSiegeMessage)) _state.ShowMessage(_localSiegeMessage);
+				_localSiegeMessage = null;
+			}
+			else if (_siegeOnline) { _siegeOnline = false; if (!_onlinePanel.IsOpen) _onlinePanel.ToggleWorldMap(); }
 			else _strategicMode = true;
 		}
 		if (_arenaFromMap && !_arena.Active)
@@ -2077,7 +2121,7 @@ public sealed class Game1 : Game
 				{
 					_state.LandChanged = false;
 					_autosaveTimer = 0f;
-					SaveManager.Save(SaveManager.DefaultPath, BuildSave());
+					SaveManager.Save(_offlineSave, BuildSave());
 				}
 			}
 		}
@@ -2349,9 +2393,11 @@ public sealed class Game1 : Game
 				_onlinePanel.ToggleWorldMap();
 				return;
 			}
-			_strategicMode = !_strategicMode;
+			// Serversiz: butun O'zbekiston xaritasi — barcha boshqa davlatlar AI, ularga yurish va qamal
+			_strategicMode = false;
 			_civMode = false;
 			_questMode = false;
+			_onlinePanel.OpenLocalWorldMap();
 			return;
 		}
 		if (_input.KeyPressed(Keys.C))

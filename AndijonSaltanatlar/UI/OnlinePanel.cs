@@ -96,7 +96,22 @@ namespace AndijonSaltanatlar.UI
             if (_client.LoggedIn) _client.QueueRefresh();
         }
 
-        public void Close() { IsOpen = false; FullMap = false; _ui.FocusId = null; _confirm = null; _dipMode = 0; _chatOpen = false; _client.ChatOpen = false; }
+        // --- SERVERSIZ dunyo xaritasi (M): ma'lumot qurilmadagi LocalWorld'dan ---
+        /// <summary>Serversiz rejim: xarita mahalliy dunyodan (Game1 beradi).</summary>
+        public Func<WarOverviewDto> LocalWar;
+        public bool LocalMode { get; private set; }
+
+        /// <summary>M (serversiz): butun O'zbekiston xaritasi — barcha AI davlatlar, ularga yurish va qamal.</summary>
+        public void OpenLocalWorldMap()
+        {
+            if (IsOpen && FullMap && LocalMode) { Close(); return; }
+            LocalMode = true;
+            FullMap = true;
+            _dipMode = 0;
+            IsOpen = true;
+        }
+
+        public void Close() { IsOpen = false; FullMap = false; LocalMode = false; _ui.FocusId = null; _confirm = null; _dipMode = 0; _chatOpen = false; _client.ChatOpen = false; }
 
         /// <summary>To'liq ekranli dunyo xaritasi (M): menyu va sarlavhasiz, butun ekran — xarita.</summary>
         public bool FullMap { get; private set; }
@@ -276,7 +291,7 @@ namespace AndijonSaltanatlar.UI
                 return;
             }
 
-            if (FullMap && _client.LoggedIn && _client.State != null && !_client.State.NeedsHome)
+            if (FullMap && (LocalMode || (_client.LoggedIn && _client.State != null && !_client.State.NeedsHome)))
             {
                 DrawFullMap(vw, vh);
                 DrawDiplomacyOverlay(vw, vh);
@@ -313,6 +328,15 @@ namespace AndijonSaltanatlar.UI
             ui.Fill(new Rectangle(0, 0, vw, vh), T.Background);
             int headH = (int)ui.Type.LineHeight(TextStyle.ScreenTitle) + 14;
             ui.Text("DUNYO XARITASI", new Vector2(pad, pad), TextStyle.ScreenTitle, T.Accent);
+            if (LocalMode)
+            {
+                // Serversiz: xat/chat/elchi yo'q — faqat xarita, AI davlatlar va yurish
+                ui.TextFit("Qasrni bosing — yurish va qamal  ·  M — yopish", new Rectangle(pad + 330, pad + 6, vw - pad * 2 - 330 - h - 8, (int)ui.Type.LineHeight(TextStyle.Secondary)), TextStyle.Secondary, T.TextSecondary);
+                if (ui.IconButton(new Rectangle(vw - pad - h, pad, h, h), "×", "Yopish (M)")) { Close(); return; }
+                WarOverviewDto lw = LocalWar?.Invoke();
+                if (lw != null) DrawWarMap(new Rectangle(pad, pad + headH, vw - 2 * pad, vh - 2 * pad - headH), lw);
+                return;
+            }
             string hint = "Qasrni bosing — egasi  ·  M — yopish";
             // Xatlar qutisi va chat tugmalari (o'qilmaganlar soni bilan)
             int unread = _client.UnreadLetters;

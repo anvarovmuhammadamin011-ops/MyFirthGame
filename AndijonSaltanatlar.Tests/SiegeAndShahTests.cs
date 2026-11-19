@@ -9,6 +9,7 @@ using Xunit;
 namespace AndijonSaltanatlar.Tests
 {
     /// <summary>Qamal (asir askarlar qo'shinga qo'shilishi) va shoh qiyofasi (semiz/ingichka, bo'y, ism).</summary>
+    [Collection("AppPathsRoot")]
     public class SiegeAndShahTests
     {
         [Fact]

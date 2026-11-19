@@ -43,17 +43,24 @@ namespace AndijonSaltanatlar.UI
         {
             if (_siegeTarget != null && DateTime.UtcNow >= _siegeArrive)
             {
+                SiegeArrivedLocal = _siegeLocal;
                 SiegeArrived = _siegeTarget;
                 _siegeTarget = null;
             }
         }
 
+        /// <summary>Yurish serversiz dunyoda boshlangan (natija qurilmada qo'llanadi).</summary>
+        public bool SiegeArrivedLocal { get; private set; }
+        private bool _siegeLocal;
+
         private void BeginSiegeMarch(WarMapRegionDto r, WarMapRegionDto home)
         {
             WarMapRegionDto target = r;
-            _client.SiegeStart(r.RegionId, ok =>
+            bool local = LocalMode;
+            Action<bool> go = ok =>
             {
                 if (!ok) return;
+                _siegeLocal = local;
                 _siegeTarget = target;
                 _siegeHome = home?.RegionId ?? -1;
                 _siegeColor = home?.Color ?? _siegeColor;
@@ -61,7 +68,8 @@ namespace AndijonSaltanatlar.UI
                 _siegeTotal = Math.Max(5, target.MarchSeconds);
                 _siegeArrive = DateTime.UtcNow.AddSeconds(_siegeTotal);
                 SiegeDeparted?.Invoke(target);
-            });
+            };
+            if (local) go(true); else _client.SiegeStart(r.RegionId, go);
         }
         private readonly List<MapCell> _cellBuf = new List<MapCell>();
 
@@ -71,7 +79,7 @@ namespace AndijonSaltanatlar.UI
             if (!ReferenceEquals(_mapWarRef, w)) { _mapWarRef = w; _mapFetchTime = ui.Time; }
             float since = ui.Time - _mapFetchTime;
             // Yurishlar davom etayotgan bo'lsa ma'lumot har 3 soniyada yangilanadi (yetib kelish/jang boshlanishi).
-            if ((w.Marches.Count > 0 || w.ActiveBattle != null) && since > 3f && !_client.WarBusy) { _mapFetchTime = ui.Time; _client.LoadWar(); }
+            if (!LocalMode && (w.Marches.Count > 0 || w.ActiveBattle != null) && since > 3f && !_client.WarBusy) { _mapFetchTime = ui.Time; _client.LoadWar(); }
 
             bool side = c.Width >= 860;
             int infoW = side ? Math.Min((int)(380 * Math.Max(1f, ui.Type.UiScale)), c.Width * 2 / 5) : c.Width;
@@ -287,8 +295,8 @@ namespace AndijonSaltanatlar.UI
             if (r.OutcomeUz.Length > 0) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
             if (r.IsMine || r.OwnerKingdomId == 0) { if (r.BlockReasonUz.Length > 0) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.TextSecondary, 2); return; }
 
-            // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat
-            y = DrawDiplomacyRow(x, y, iw, r);
+            // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat (faqat onlayn)
+            if (!LocalMode) y = DrawDiplomacyRow(x, y, iw, r);
 
             // Qamal: shahardagi o'z jangchilaringiz bilan (server qo'shini shart emas)
             int local = LocalArmyCount?.Invoke() ?? 0;
@@ -298,7 +306,7 @@ namespace AndijonSaltanatlar.UI
                 : _siegeTarget != null ? "Qo'shiningiz yo'lda: " + _siegeTarget.Name + " (" + (int)Math.Max(0, (_siegeArrive - DateTime.UtcNow).TotalSeconds) + " s)"
                 : local < WarRules.MinBattleArmy ? "Shahringizda kamida " + WarRules.MinBattleArmy + " jangchi bo'lsin (hozir " + local + "). DIAGNOSTIKA → QO'SHIN bo'limida yollang."
                 : "";
-            bool canGo = r.CanSiege && _siegeTarget == null && local >= WarRules.MinBattleArmy && !_client.WarBusy;
+            bool canGo = r.CanSiege && _siegeTarget == null && local >= WarRules.MinBattleArmy && (LocalMode || !_client.WarBusy);
             int by = info.Bottom - h - 12;
             if (why.Length > 0) ui.Paragraph(why, new Rectangle(x, by - (int)(lh * 2 + 8), iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.Warning, 2);
             if (ui.Button(new Rectangle(x, by, iw, h), canGo ? "YURISH BOSHLASH" : "Yurish mumkin emas", ButtonKind.Danger, canGo, "Qo'shin yo'lga chiqadi; yetib borgach shahar ichida jang, saroyda shoh va vazir"))
