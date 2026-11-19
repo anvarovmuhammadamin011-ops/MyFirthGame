@@ -23,8 +23,8 @@ namespace AndijonSaltanatlar.World
     /// </summary>
     public sealed class LivestockSystem
     {
-        public enum Kind { Sheep, Goat, Cow, Chicken, Dog }
-        private const int KindCount = 5;
+        public enum Kind { Sheep, Goat, Cow, Chicken, Dog, Duck }
+        private const int KindCount = 6;
 
         private const int HerdCapacity = 24;
         private const int CoopCapacity = 8;
@@ -36,6 +36,7 @@ namespace AndijonSaltanatlar.World
             public CitizenUnit Shepherd;   // tovuqxonada null
             public Vector2 Center;
             public bool Coop;              // hovlidagi tovuqlar
+            public bool Pond;              // suvdagi o'rdaklar
             public readonly List<Animal> Animals = new List<Animal>();
             public int Capacity => Coop ? CoopCapacity : HerdCapacity;
         }
@@ -108,7 +109,26 @@ namespace AndijonSaltanatlar.World
                 }
 
             if (buildings != null) SpawnCoops(buildings);
+            SpawnPonds();
             Recount();
+        }
+
+        /// <summary>Suv havzalarida (ko'lmak, daryo) o'rdaklar suzadi.</summary>
+        private void SpawnPonds()
+        {
+            var water = new List<Vector2>();
+            for (int y = 0; y < _map.Height; y++)
+                for (int x = 0; x < _map.Width; x++)
+                    if (_map.GetTile(x, y) == TileType.Water) water.Add(new Vector2(x + 0.5f, y + 0.5f));
+            if (water.Count < 3) return;
+            int ponds = water.Count > 24 ? 2 : 1;
+            for (int p = 0; p < ponds; p++)
+            {
+                var pond = new Herd { Pond = true, Center = water[_rng.Next(water.Count)] };
+                _herds.Add(pond);
+                int ducks = 3 + _rng.Next(3);
+                for (int i = 0; i < ducks; i++) AddAnimal(pond, Kind.Duck, false);
+            }
         }
 
         /// <summary>Uylar yonidagi hovlilarda tovuqlar (har ikkinchi uyda, ko'pi bilan MaxCoops ta).</summary>
@@ -132,12 +152,14 @@ namespace AndijonSaltanatlar.World
 
         private Animal AddAnimal(Herd herd, Kind kind, bool baby, Vector2? near = null)
         {
-            Vector2 p = OpenNear(near ?? herd.Center, herd.Coop ? 1.0f : 2.2f) ?? herd.Center;
+            Vector2 p = kind == Kind.Duck
+                ? (OpenWaterNear(near ?? herd.Center, 2.4f) ?? herd.Center)
+                : (OpenNear(near ?? herd.Center, herd.Coop ? 1.0f : 2.2f) ?? herd.Center);
             var a = new Animal
             {
                 Kind = kind, Herd = herd, Baby = baby, Pos = p, Target = p,
                 Timer = (float)_rng.NextDouble() * 2f, FacingLeft = _rng.Next(2) == 0,
-                Speed = kind switch { Kind.Cow => 0.75f, Kind.Goat => 1.05f, Kind.Chicken => 0.6f, Kind.Dog => 1.5f, _ => 0.9f }
+                Speed = kind switch { Kind.Cow => 0.75f, Kind.Goat => 1.05f, Kind.Chicken => 0.6f, Kind.Dog => 1.5f, Kind.Duck => 0.5f, _ => 0.9f }
             };
             a.Tex = _tex[(int)kind, baby ? 1 : 0, 0];
             herd.Animals.Add(a);
@@ -155,7 +177,8 @@ namespace AndijonSaltanatlar.World
                         case Kind.Goat: g++; break;
                         case Kind.Cow: c++; break;
                         case Kind.Chicken: h++; break;
-                        default: d++; break;
+                        case Kind.Dog: d++; break;
+                        default: break; // Duck — podaga sanalmaydi
                     }
             Sheep = s; Goats = g; Cows = c; Chickens = h; Dogs = d;
         }
@@ -164,6 +187,26 @@ namespace AndijonSaltanatlar.World
         {
             int x = (int)MathF.Floor(p.X), y = (int)MathF.Floor(p.Y);
             return _map.InBounds(x, y) && _map.GetTile(x, y) != TileType.Water && _map.GetOccupant(x, y) == null;
+        }
+
+        /// <summary>O'rdaklar uchun: faqat suv kataklari ochiq.</summary>
+        private bool IsWaterOpen(Vector2 p)
+        {
+            int x = (int)MathF.Floor(p.X), y = (int)MathF.Floor(p.Y);
+            return _map.InBounds(x, y) && _map.GetTile(x, y) == TileType.Water;
+        }
+
+        private bool CanStand(Animal a, Vector2 p) => a.Kind == Kind.Duck ? IsWaterOpen(p) : IsOpen(p);
+
+        private Vector2? OpenWaterNear(Vector2 c, float radius)
+        {
+            for (int i = 0; i < 28; i++)
+            {
+                float a = (float)(_rng.NextDouble() * MathF.PI * 2), r = (float)Math.Sqrt(_rng.NextDouble()) * radius;
+                Vector2 p = c + new Vector2(MathF.Cos(a), MathF.Sin(a)) * r;
+                if (IsWaterOpen(p)) return p;
+            }
+            return null;
         }
 
         private Vector2? OpenNear(Vector2 c, float radius)
@@ -225,7 +268,7 @@ namespace AndijonSaltanatlar.World
             foreach (Herd h in _herds)
                 foreach (Animal a in h.Animals)
                 {
-                    if (a.Baby || a.Kind == Kind.Dog) continue;
+                    if (a.Baby || a.Kind == Kind.Dog || a.Kind == Kind.Duck) continue;
                     if (a.Kind == Kind.Chicken) { hens++; continue; }
                     adultsAll++;
                     if (a.Kind == Kind.Cow) cows++;
@@ -254,9 +297,32 @@ namespace AndijonSaltanatlar.World
                 {
                     if (a.Kind == Kind.Dog) UpdateDog(a, dt);
                     else if (a.Kind == Kind.Chicken) UpdateChicken(a, dt);
+                    else if (a.Kind == Kind.Duck) UpdateDuck(a, dt);
                     else UpdateAnimal(a, dt);
                 }
+                // Jonivorlar bir-biriga urilib, ustma-ust tushib qolmasin — yengil ajralish kuchi
+                foreach (Animal a in h.Animals) Separate(h, a);
             }
+        }
+
+        /// <summary>Yaqin turgan poda a'zolarini bir-biridan yengil itaradi (ustma-ust tushish/"urishish" bagini oldini oladi).</summary>
+        private void Separate(Herd h, Animal a)
+        {
+            float min = a.Herd.Coop ? 0.3f : 0.42f;
+            Vector2 push = Vector2.Zero;
+            foreach (Animal o in h.Animals)
+            {
+                if (o == a) continue;
+                Vector2 d = a.Pos - o.Pos;
+                float dist = d.Length();
+                if (dist > 0.0001f && dist < min) push += d / dist * (min - dist);
+                else if (dist <= 0.0001f) push += new Vector2((float)_rng.NextDouble() - 0.5f, (float)_rng.NextDouble() - 0.5f) * min;
+            }
+            if (push == Vector2.Zero) return;
+            Vector2 np = a.Pos + push * 0.6f;
+            if (CanStand(a, np)) a.Pos = np;
+            else if (CanStand(a, new Vector2(np.X, a.Pos.Y))) a.Pos = new Vector2(np.X, a.Pos.Y);
+            else if (CanStand(a, new Vector2(a.Pos.X, np.Y))) a.Pos = new Vector2(a.Pos.X, np.Y);
         }
 
         private Unit NearestEnemy(Vector2 p, float range)
@@ -383,6 +449,25 @@ namespace AndijonSaltanatlar.World
             Step(dog, speed * dog.Rush, dt, sit);
         }
 
+        /// <summary>O'RDAK: suv havzasida sekin suzadi, vaqti-vaqti boshini suvga tiqib ozuqa izlaydi.</summary>
+        private void UpdateDuck(Animal a, float dt)
+        {
+            a.Timer -= dt;
+            float far = Vector2.Distance(a.Pos, a.Herd.Center);
+            if (!a.Moving && (a.Timer <= 0f || far > 3.2f))
+            {
+                int act = _rng.Next(10);
+                if (act < 4 && far < 3f) { a.Grazing = true; a.Timer = 1.6f + (float)_rng.NextDouble() * 2.6f; } // suvdan ozuqa (bosh suvga)
+                else
+                {
+                    Vector2? t = OpenWaterNear(a.Herd.Center, 2.6f);
+                    if (t.HasValue) { a.Target = t.Value; a.Moving = true; a.Grazing = false; }
+                    a.Timer = 1.2f + (float)_rng.NextDouble() * 2f;
+                }
+            }
+            Step(a, a.Speed, dt, a.Grazing);
+        }
+
         /// <summary>TOVUQ: hovlida don cho'qiydi, odam yoki jonivor yaqinlashsa pirillab qochadi.</summary>
         private void UpdateChicken(Animal a, float dt)
         {
@@ -444,9 +529,9 @@ namespace AndijonSaltanatlar.World
                 {
                     Vector2 step = to / d * MathF.Min(speed * dt, d);
                     Vector2 np = a.Pos + step;
-                    if (IsOpen(np)) a.Pos = np;
-                    else if (IsOpen(new Vector2(np.X, a.Pos.Y))) a.Pos = new Vector2(np.X, a.Pos.Y);
-                    else if (IsOpen(new Vector2(a.Pos.X, np.Y))) a.Pos = new Vector2(a.Pos.X, np.Y);
+                    if (CanStand(a, np)) a.Pos = np;
+                    else if (CanStand(a, new Vector2(np.X, a.Pos.Y))) a.Pos = new Vector2(np.X, a.Pos.Y);
+                    else if (CanStand(a, new Vector2(a.Pos.X, np.Y))) a.Pos = new Vector2(a.Pos.X, np.Y);
                     else a.Moving = false;
                     float sx = IsoMath.TileToWorld(step).X;
                     if (MathF.Abs(sx) > 0.0001f) a.FacingLeft = sx < 0;
@@ -510,6 +595,7 @@ namespace AndijonSaltanatlar.World
                 case LivestockSystem.Kind.Cow: return Cow(s, frame);
                 case LivestockSystem.Kind.Chicken: return baby ? Chick(frame) : Hen(frame);
                 case LivestockSystem.Kind.Dog: return Dog(s, frame);
+                case LivestockSystem.Kind.Duck: return Duck(frame);
                 default: return Sheep(s, frame);
             }
         }
@@ -611,6 +697,25 @@ namespace AndijonSaltanatlar.World
             c.FillRect((int)hx + 2, (int)hy, 1, 1, beak);          // tumshuq
             c.FillRect((int)hx + 1, (int)hy + 1, 1, 1, comb);      // soqolcha
             c.FillRect((int)hx, (int)hy - 1, 1, 1, Ink);           // ko'z
+            c.Outline(Ink, 0.4f);
+            return c;
+        }
+
+        /// <summary>O'rdak: suvda suzadi, pastki qismi suv sathida. frame 3 — boshini suvga tiqish.</summary>
+        private static Canvas Duck(int frame)
+        {
+            var c = new Canvas(14, 10);
+            Color body = new Color(238, 232, 218), wing = new Color(150, 120, 86), head = new Color(60, 118, 84), beak = new Color(238, 168, 58);
+            c.FillEllipse(7f, 8.6f, 5.5f, 1.0f, new Color(40, 96, 128, 90)); // suv aksi
+            c.FillEllipse(6.5f, 6f, 5f, 2.5f, body, 0.06f);                   // tana
+            c.FillEllipse(4.0f, 5.4f, 2.3f, 1.5f, wing);                      // qanot
+            c.FillPolygon(body, 0f, new Vector2(1.4f, 4.8f), new Vector2(3.4f, 6.2f), new Vector2(1.9f, 6.6f)); // dum
+            bool feed = frame == 3;
+            float hx = feed ? 10.6f : 10.2f, hy = feed ? 6.6f : 2.7f;
+            c.Line(new Vector2(9f, 5f), new Vector2(hx, hy + 1f), head, 2);   // bo'yin
+            c.FillEllipse(hx, hy, 1.8f, 1.7f, head);                          // bosh
+            c.FillRect((int)hx + 1, (int)hy, 2, 1, beak);                     // tumshuq
+            c.FillRect((int)hx, (int)hy - 1, 1, 1, Ink);                      // ko'z
             c.Outline(Ink, 0.4f);
             return c;
         }
