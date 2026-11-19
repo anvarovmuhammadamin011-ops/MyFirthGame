@@ -556,6 +556,15 @@ namespace AndijonSaltanatlar.Core.Graphics
             }
             ic.Box(3.28f, 0.24f, 3.78f, 0.38f, 0, 12, Pal.Wood, 3);
             ic.Box(3.72f, 0.24f, 3.86f, 3.72f, 0, 12, Pal.Wood, 3);
+            // Chegara: dala atrofida past yog'och panjara (ferma ekanligi aniq bilinib turadi)
+            Color fence = new Color(146, 104, 62);
+            for (float e = 0.2f; e <= 3.8f; e += 0.6f)
+            {
+                ic.Pole(e, 0.08f, 0, 6, fence, 1);
+                ic.Pole(e, 3.92f, 0, 6, fence, 1);
+                ic.Pole(0.08f, e, 0, 6, fence, 1);
+                ic.Pole(3.92f, e, 0, 6, fence, 1);
+            }
             // Daraja: ferma kengayadi — qarovul, ombor va shiypon (minora emas)
             if (level >= 2)
             {

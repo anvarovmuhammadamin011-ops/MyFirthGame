@@ -301,9 +301,10 @@ namespace AndijonSaltanatlar.World
         /// </summary>
         private void DrawCrops(SpriteBatch sb, Farm farm)
         {
-            if (farm.CropStage == FarmCropStage.Empty) return;
+            bool planting = farm.CropStage == FarmCropStage.Empty;
+            if (planting && farm.PlantProgress <= 0f) return;
             float g = farm.Growth;
-            int stage = farm.CropStage == FarmCropStage.Mature ? 4 : g < 0.06f ? 0 : g < 0.3f ? 1 : g < 0.6f ? 2 : 3;
+            int stage = planting ? 0 : farm.CropStage == FarmCropStage.Mature ? 4 : g < 0.06f ? 0 : g < 0.3f ? 1 : g < 0.6f ? 2 : 3;
             Texture2D tex = _assets.TryGet("crop_" + stage);
             if (tex == null) return;
             float k = AssetManager.ScaleOf(tex);
@@ -311,9 +312,13 @@ namespace AndijonSaltanatlar.World
             // o'sish ichida biroz kattalashadi (bosqichlar orasida silliq)
             float grow = stage == 0 || stage == 4 ? 1f : 0.8f + 0.4f * ((g * 4f) % 1f) * 0.5f;
             var origin = new Vector2(tex.Width / 2f, tex.Height - 3 / k);
-            for (int row = 0; row < 5; row++)
-                for (int col = 0; col < 9; col++)
+            const int cols = 9, rows = 5;
+            int planted = planting ? (int)(farm.PlantProgress * rows * cols + 0.001f) : rows * cols;
+            int idx = 0;
+            for (int row = 0; row < rows; row++)
+                for (int col = 0; col < cols; col++, idx++)
                 {
+                    if (planting && idx >= planted) continue; // hali ekilmagan jo'yaklar bo'sh (qator-qator to'ladi)
                     float x = 0.56f + col * 0.36f, y = 0.46f + row * 0.62f;
                     Vector2 w = IsoMath.TileToWorld(new Vector2(farm.Position.X + x, farm.Position.Y + y)) + new Vector2(0, -7 - podium);
                     float sway = stage >= 2 ? 0.04f * MathF.Sin(_time * 1.7f + col * 0.7f + row) : 0f;

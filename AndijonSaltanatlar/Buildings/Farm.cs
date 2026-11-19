@@ -25,6 +25,18 @@ namespace AndijonSaltanatlar.Buildings
         /// <summary>Dalaga o'z dehqoni biriktirilgan: ekish, o'rish va bozorga olib borishni dehqon o'zi qiladi.</summary>
         public bool Tended { get; set; }
 
+        /// <summary>Ekish jarayoni (0..1): dehqon jo'yaklar bo'ylab yurib qator-qator ekadi. 1 ga yetganda Growing bo'ladi.</summary>
+        public float PlantProgress { get; private set; }
+        public bool IsPlanting => CropStage == FarmCropStage.Empty && PlantProgress > 0f && PlantProgress < 1f;
+
+        /// <summary>Ekishni bir oz davom ettiradi (qator-qator). To'lgach ekin o'sa boshlaydi.</summary>
+        public void AdvancePlant(float amount)
+        {
+            if (CropStage != FarmCropStage.Empty || amount <= 0f) return;
+            PlantProgress = Math.Min(1f, PlantProgress + amount);
+            if (PlantProgress >= 1f) { PlantCrop(); }
+        }
+
         /// <summary>Dehqon parvarishida o'sish (o'yin soati bo'yicha): shuncha soatda pishadi.</summary>
         public const float TendedGrowHours = 8f;
         private float _growth;
@@ -69,6 +81,7 @@ namespace AndijonSaltanatlar.Buildings
             CropStage = FarmCropStage.Empty;
             GrowthDays = 0;
             _growth = 0f;
+            PlantProgress = 0f; // keyingi mavsum qator-qator qaytadan ekiladi
             StoredProduce += CropYield;
             return CropYield;
         }

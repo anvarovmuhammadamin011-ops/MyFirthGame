@@ -173,7 +173,8 @@ namespace AndijonSaltanatlar.Interiors
         /// masjid, madrasa, minora va darvoza — har biriga o'z shabloni beriladi. Devor tekshiriladi (ichki xona yo'q).
         /// </summary>
         internal static bool IsEnterable(Building b) =>
-            b != null && b.BuildProgress >= 1f && b.Type != BuildingType.Wall;
+            b != null && b.BuildProgress >= 1f && b.Type != BuildingType.Wall && b.Type != BuildingType.Farm;
+            // Ferma — ichiga kirilmaydigan ochiq dala (dehqon tashqarida ishlaydi).
 
         // ==================================================================
         // Shahardagi binoni topish

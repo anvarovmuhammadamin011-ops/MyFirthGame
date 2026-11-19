@@ -10,7 +10,6 @@ namespace AndijonSaltanatlar.Tests
         [Theory]
         [InlineData(BuildingType.House)]
         [InlineData(BuildingType.Market)]
-        [InlineData(BuildingType.Farm)]
         [InlineData(BuildingType.Garden)]
         [InlineData(BuildingType.Caravanserai)]
         [InlineData(BuildingType.Barracks)]
@@ -30,6 +29,13 @@ namespace AndijonSaltanatlar.Tests
         public void WallIsInspectedNotEntered()
         {
             Assert.False(HouseInterior.IsEnterable(BuildingFactory.Create(BuildingType.Wall, new Point(4, 4))));
+        }
+
+        [Fact]
+        public void FarmIsOpenFieldNotEntered()
+        {
+            // Ferma — ichiga kirilmaydigan ochiq dala (dehqon tashqarida ishlaydi).
+            Assert.False(HouseInterior.IsEnterable(BuildingFactory.Create(BuildingType.Farm, new Point(4, 4))));
         }
 
         [Fact]

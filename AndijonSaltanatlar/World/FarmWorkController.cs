@@ -32,6 +32,8 @@ namespace AndijonSaltanatlar.World
             public bool WaterMode;      // hozir sug'oryapti (aks holda ketmon bilan chopyapti)
             public float ModeTimer;
             public float Wet;           // sug'orilganlik (0..1) — ekin tezroq o'sadi
+            public int Tier;            // jihoz darajasi (0 oddiy ketmon → 2 yaxshi asbob): tezroq ishlaydi
+            public int Earned;          // jami topilgan tanga (jihoz yangilash uchun)
         }
 
         private readonly Dictionary<int, Job> _jobs = new Dictionary<int, Job>();
@@ -140,7 +142,7 @@ namespace AndijonSaltanatlar.World
             // Sug'orilgan dala 1.5 barobar tez o'sadi; namlik asta quriydi
             j.Wet = Math.Max(0f, j.Wet - hours / 3f);
             if (f.CropStage == FarmCropStage.Growing)
-                f.AdvanceGrowth(hours / Farm.TendedGrowHours * (j.Phase == Phase.Work ? 1.25f : 0.8f) * (j.Wet > 0f ? 1.5f : 1f));
+                f.AdvanceGrowth(hours / Farm.TendedGrowHours * (j.Phase == Phase.Work ? 1.25f : 0.8f) * (j.Wet > 0f ? 1.5f : 1f) * (1f + j.Tier * 0.2f));
 
             switch (j.Phase)
             {
@@ -175,14 +177,23 @@ namespace AndijonSaltanatlar.World
                     w.Working = !j.WaterMode;
                     w.Watering = j.WaterMode && still;
                     j.Timer += gameDt;
-                    if (f.CropStage == FarmCropStage.Empty && j.Timer > 4f)
+                    if (f.CropStage == FarmCropStage.Empty)
                     {
-                        if (state.Farming.TryConsumeSeed())
+                        if (f.PlantProgress <= 0f)
                         {
-                            f.PlantCrop();
-                            w.Say("Urug' sepdim!", 2.5f);
+                            // Ekishni boshlash — urug' kerak (yerni chopib bo'lgach)
+                            if (j.Timer > 4f)
+                            {
+                                if (state.Farming.TryConsumeSeed()) { f.AdvancePlant(1f / 45f); w.Say("Urug' ekyapman...", 2.5f); }
+                                else if (j.Timer > 12f) { w.Say("Urug' tugadi...", 3f); j.Timer = 4f; }
+                            }
                         }
-                        else if (j.Timer > 12f) { w.Say("Urug' tugadi...", 3f); j.Timer = 4f; }
+                        else
+                        {
+                            // Jo'yaklar bo'ylab qator-qator ekish davom etadi (yaxshi jihoz — tezroq)
+                            f.AdvancePlant(gameDt / 8f * (1f + j.Tier * 0.5f));
+                            w.Working = true;
+                        }
                     }
                     else if (f.CropStage == FarmCropStage.Mature)
                     {
@@ -225,8 +236,15 @@ namespace AndijonSaltanatlar.World
                             {
                                 int coins = j.Carry * 2;
                                 state.Coins += coins;
-                                w.Say("Sotdim: +" + coins + " tanga", 3f);
-                                state.ShowMessage("Dehqon bozorda " + j.Carry + " qop hosil sotdi: +" + coins + " tanga");
+                                j.Earned += coins;
+                                // Jihoz yangilash: pul yiqqach dehqon ketmonini yaxshiroq asbobga almashtiradi (tezroq ishlaydi)
+                                if (j.Tier < 2 && j.Earned >= (j.Tier + 1) * 140)
+                                {
+                                    j.Tier++;
+                                    w.Say("Yangi, yaxshiroq ketmon oldim! Ish tezlashdi.", 3.5f);
+                                }
+                                // Pul ko'rsatkichi faqat dehqon ustida kichik (bilinar-bilinmas) — katta toast emas
+                                else w.Say("+" + coins + " tanga", 3f);
                             }
                             else
                             {
