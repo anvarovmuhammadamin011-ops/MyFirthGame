@@ -38,7 +38,7 @@ namespace AndijonSaltanatlar.UI
         /// <summary>Telefon (sensorli ekran) rejimi: yuqori/pastki panellar va kichik tugmalar barmoq uchun kattaroq.</summary>
         public bool Touch { get; set; }
         private int TopH => Touch ? 44 : 36;
-        private int BottomH => Touch ? 58 : 44;
+        public int BottomH => Touch ? 58 : 44;
         private int SmallBtn => Touch ? 30 : 22;
         private const int PanelW = 248;
 

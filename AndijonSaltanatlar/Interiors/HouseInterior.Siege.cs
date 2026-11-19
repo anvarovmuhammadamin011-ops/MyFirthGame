@@ -34,6 +34,8 @@ namespace AndijonSaltanatlar.Interiors
 
         /// <summary>Hozir saroyda qamal jangi ketyaptimi.</summary>
         public bool FightMode => _fight;
+        /// <summary>Telefon (sensorli ekran): ko'rsatmalar ekrandagi tugmalarga mos.</summary>
+        public bool TouchUi { get; set; }
         public bool FightShahDown { get; private set; }
         public bool FightVizierDown { get; private set; }
         /// <summary>Saroyga kirgan jangchi yiqildi (u tashqariga chiqarildi).</summary>
@@ -64,7 +66,7 @@ namespace AndijonSaltanatlar.Interiors
                 _residents.Add(r);
             }
             UpdateFightFlags();
-            _state.ShowMessage("Dushman saroyiga kirdingiz! Shoh va vazirni yenging (SPACE — zarba)", true);
+            _state.ShowMessage("Dushman saroyiga kirdingiz! Shoh va vazirni yenging (ZARBA / SPACE)", true);
         }
 
         /// <summary>Qamal tugadi — oddiy rejimga qaytish.</summary>

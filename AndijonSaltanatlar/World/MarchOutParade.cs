@@ -172,22 +172,22 @@ namespace AndijonSaltanatlar.World
         public void DrawHud(SpriteBatch sb, Texture2D px, PixelFont font, CameraManager cam, int vw, int vh, int k)
         {
             if (!Active) return;
-            int ts = 3 * k, ds = 2 * k;
-            while (ts > k && font.Measure(_title, ts).X > vw - 60) ts--;
-            while (ds > k && font.Measure(_detail, ds).X > vw - 60) ds--;
-            Vector2 tm = font.Measure(_title, ts), dm = font.Measure(_detail, ds);
-            int w = (int)Math.Max(tm.X, dm.X) + 32 * k, h = (int)(tm.Y + dm.Y) + 22 * k;
-            var r = new Rectangle(vw / 2 - w / 2, 54 * k, w, h);
-            sb.Draw(px, new Rectangle(r.X - 2, r.Y - 2, r.Width + 4, r.Height + 4), new Color(216, 167, 83, 230));
-            sb.Draw(px, r, new Color(24, 20, 18, 230));
-            font.DrawCentered(sb, _title, new Vector2(vw / 2f, r.Y + 7 * k + tm.Y / 2f), new Color(255, 214, 90), ts);
-            font.DrawCentered(sb, _detail, new Vector2(vw / 2f, r.Y + 13 * k + tm.Y + dm.Y / 2f), new Color(236, 224, 200), ds);
+            // Tor ekranda shrift kichraytirilmaydi — qatorlarga bo'linadi
+            int ts = AndijonSaltanatlar.UI.HudText.Scale(font, _title, 3 * k, 2 * k, vw - 60);
+            var tl = AndijonSaltanatlar.UI.HudText.Wrap(font, _title, ts, vw - 60, 2);
+            var dl = AndijonSaltanatlar.UI.HudText.Wrap(font, _detail, 2 * k, vw - 60, 3);
+            var lines = new List<string>(tl);
+            lines.AddRange(dl);
+            Rectangle r = AndijonSaltanatlar.UI.HudText.Box(sb, px, font, tl, ts, vw / 2f, 54 * k, new Color(24, 20, 18, 230), new Color(255, 214, 90), 16 * k, 6 * k, new Color(216, 167, 83, 230));
+            Rectangle r2 = AndijonSaltanatlar.UI.HudText.Box(sb, px, font, dl, 2 * k, vw / 2f, r.Bottom, new Color(24, 20, 18, 230), new Color(236, 224, 200), 16 * k, 5 * k);
+            int bannerBottom = Math.Max(r.Bottom, r2.Bottom);
 
             foreach (var g in Groups)
             {
                 Marcher lead = _marchers.FirstOrDefault(x => x.Group == g.Key && !x.Done && !x.Unit.Hidden);
                 if (lead == null) continue;
                 Vector2 sp = cam.WorldToScreen(IsoMath.TileToWorld(lead.Unit.Position) + new Vector2(0, -62));
+                if (sp.Y < bannerBottom + 12) continue; // yozuv tepadagi yo'nalish qutisiga tushmasin
                 Vector2 lm = font.Measure(g.Label, 2 * k);
                 var lr = new Rectangle((int)(sp.X - lm.X / 2 - 6 * k), (int)(sp.Y - lm.Y / 2 - 3 * k), (int)lm.X + 12 * k, (int)lm.Y + 6 * k);
                 sb.Draw(px, lr, new Color(24, 20, 18, 210));

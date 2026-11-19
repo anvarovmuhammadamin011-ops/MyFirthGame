@@ -64,6 +64,9 @@ namespace AndijonSaltanatlar.UI
             }
         }
 
+        /// <summary>Pastdan bo'sh qoldiriladigan joy (pastki menyu ustida chiqishi uchun).</summary>
+        public int BottomInset { get; set; }
+
         public void Draw(SpriteBatch sb, int vw, int vh)
         {
             if (!_active || _font == null) return;
@@ -80,7 +83,7 @@ namespace AndijonSaltanatlar.UI
             float tOut = Math.Clamp((_hold - _age) / 0.35f, 0f, 1f);
             float app = Math.Min(tIn, tOut);                 // 0..1
             float ease = 1f - (1f - app) * (1f - app);
-            int yTarget = vh - cardH - 14;
+            int yTarget = vh - cardH - 14 - BottomInset;
             int y = (int)(yTarget + (1f - ease) * (cardH + 24));
             float alpha = ease;
 

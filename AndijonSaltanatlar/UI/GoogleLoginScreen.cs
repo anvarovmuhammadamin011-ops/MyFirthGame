@@ -345,15 +345,19 @@ namespace AndijonSaltanatlar.UI
             ThemeTokens T = ui.T;
             int h = ui.ControlH + (ui.IsTouch ? 8 : 10), gap = ui.Gap;
             float capH = ui.Type.LineHeight(TextStyle.Secondary);
-            int cardH = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ui.Type.LineHeight(TextStyle.Body) + capH * 4) + 5 * h + 9 * gap + 70;
+            int full = (int)(ui.Type.LineHeight(TextStyle.MainTitle) + ui.Type.LineHeight(TextStyle.Body) + capH * 4) + 5 * h + 9 * gap + 70;
+            // Past ekran (telefon yotiq holatda): ixcham — sarlavha ostidagi matn va izoh yo'q, oraliqlar kichik
+            bool compact = full > vh - 24;
+            if (compact) { h = ui.ControlH; gap = Math.Max(4, gap / 2); }
+            int cardH = compact ? (int)(ui.Type.LineHeight(TextStyle.MainTitle) + capH * 3) + 5 * h + 7 * gap + 44 : full;
             Rectangle card = Card(ui, vw, vh, ui.Compact ? 760 : 700, cardH, appear);
-            int x = card.X + 28, w = card.Width - 56, y = card.Y + 22;
-            Title(ui, sb, card, ref y, "SHOHINGIZNI YARATING", "Shohingiz shaharda, saroyda va jangda shunday ko'rinadi");
+            int x = card.X + 28, w = card.Width - 56, y = card.Y + (compact ? 12 : 22);
+            Title(ui, sb, card, ref y, "SHOHINGIZNI YARATING", compact ? null : "Shohingiz shaharda, saroyda va jangda shunday ko'rinadi");
             y += gap;
 
             // Chapda — oldindan ko'rinish (sahna: zamin, soya, shoh)
             int pw = Math.Min(w * 2 / 5, 260);
-            int bottomBtn = card.Bottom - h - 18;
+            int bottomBtn = card.Bottom - h - (compact ? 10 : 18);
             var prev = new Rectangle(x, y, pw, Math.Max(120, bottomBtn - gap - y));
             ui.RoundedBorder(prev, T.Border, new Color(30, 34, 44), 10);
             ui.Fill(new Rectangle(prev.X + 2, prev.Y + prev.Height * 2 / 3, prev.Width - 4, prev.Height / 3 - 2), new Color(64, 54, 40));
@@ -384,8 +388,9 @@ namespace AndijonSaltanatlar.UI
 
             ry = Choice(ui, "Tana tuzilishi", AndijonSaltanatlar.Core.ShahLook.BodyNames, ref _shahBody, rx, ry, rw, h, gap, capH);
             ry = Choice(ui, "Bo'yi", AndijonSaltanatlar.Core.ShahLook.HeightNames, ref _shahHeight, rx, ry, rw, h, gap, capH);
-            ui.Paragraph("Keyin ham o'zgartirsa bo'ladi: kirish oynasida \"SHOH QIYOFASI\" tugmasi.",
-                new Rectangle(rx, ry, rw, (int)(capH * 4)), TextStyle.Caption, T.TextSecondary, 4);
+            if (!compact && ry + capH * 2 < bottomBtn)
+                ui.Paragraph("Keyin ham o'zgartirsa bo'ladi: kirish oynasida \"SHOH QIYOFASI\" tugmasi.",
+                    new Rectangle(rx, ry, rw, Math.Min((int)(capH * 4), bottomBtn - ry - 4)), TextStyle.Caption, T.TextSecondary, 4);
 
             var btn = new Rectangle(x, bottomBtn, w, h);
             if (ui.Button(btn, "TAYYOR", ButtonKind.Primary, true))

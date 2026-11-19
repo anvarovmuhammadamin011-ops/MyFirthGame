@@ -39,6 +39,9 @@ namespace AndijonSaltanatlar.UI
         private int _siegeTotal;
 
         /// <summary>Har kadr (xarita yopiq bo'lsa ham): yurish vaqti tugadimi.</summary>
+        /// <summary>Sinov: xaritada qasrni tanlash.</summary>
+        public void SelectMapRegion(int regionId) => _mapRegion = regionId;
+
         private void UpdateSiegeMarch()
         {
             if (_siegeTarget != null && DateTime.UtcNow >= _siegeArrive)
@@ -285,14 +288,16 @@ namespace AndijonSaltanatlar.UI
                 if (free > 0 && y + lh < info.Bottom - 10) ui.TextFit("Egasiz hududlar: " + free, new Rectangle(x, y, iw, (int)lh), TextStyle.Caption, T.TextSecondary);
                 return;
             }
+            // Past panel (telefon): ikkinchi darajali qatorlar tushirib qoldiriladi — hammasi sig'adi
+            bool tight = info.Height < 460;
             ui.TextFit(r.Name + (r.IsCapital ? " · poytaxt" : ""), new Rectangle(x, y, iw, (int)ui.Type.LineHeight(TextStyle.PanelTitle)), TextStyle.PanelTitle); y += (int)ui.Type.LineHeight(TextStyle.PanelTitle) + 4;
             void Row(string a, Color? c = null) { ui.TextFit(a, new Rectangle(x, y, iw, (int)lh), TextStyle.Secondary, c ?? T.TextPrimary); y += (int)lh + 4; }
-            Row("Viloyat: " + AndijonSaltanatlar.Shared.Geo.UzMap.ProvinceName(r.Province), T.TextSecondary);
+            if (!tight) Row("Viloyat: " + AndijonSaltanatlar.Shared.Geo.UzMap.ProvinceName(r.Province), T.TextSecondary);
             Row("Egasi: " + r.OwnerName + (r.OwnerIsAi || r.IsMine || r.OwnerKingdomId == 0 ? "" : " (real o'yinchi)"));
             Row("Shahar: " + r.CityName + " · aholi " + r.Population);
             if (!r.IsMine && r.OwnerKingdomId != 0) Row("Himoya ≈ " + r.DefenseEstimate);
             if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · yurish tekin", T.TextSecondary);
-            if (r.OutcomeUz.Length > 0) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
+            if (r.OutcomeUz.Length > 0 && (!tight || r.IsMine)) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
             if (r.IsMine || r.OwnerKingdomId == 0) { if (r.BlockReasonUz.Length > 0) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.TextSecondary, 2); return; }
 
             // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat (faqat onlayn)
@@ -302,13 +307,14 @@ namespace AndijonSaltanatlar.UI
             int local = LocalArmyCount?.Invoke() ?? 0;
             Row("Shahringizdagi qo'shin: " + local + " jangchi", local >= WarRules.MinBattleArmy ? T.TextPrimary : T.Warning);
             if (!string.IsNullOrEmpty(r.RulerName)) Row("Saroyda: shoh " + r.RulerName + " va vaziri", T.TextSecondary);
+            if (tight && r.OutcomeUz.Length > 0 && y + lh * 4 < info.Bottom - h - 12) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Caption, T.TextSecondary, 2) + 4;
             string why = !r.CanSiege ? r.BlockReasonUz
                 : _siegeTarget != null ? "Qo'shiningiz yo'lda: " + _siegeTarget.Name + " (" + (int)Math.Max(0, (_siegeArrive - DateTime.UtcNow).TotalSeconds) + " s)"
                 : local < WarRules.MinBattleArmy ? "Shahringizda kamida " + WarRules.MinBattleArmy + " jangchi bo'lsin (hozir " + local + "). DIAGNOSTIKA → QO'SHIN bo'limida yollang."
                 : "";
             bool canGo = r.CanSiege && _siegeTarget == null && local >= WarRules.MinBattleArmy && (LocalMode || !_client.WarBusy);
             int by = info.Bottom - h - 12;
-            if (why.Length > 0) ui.Paragraph(why, new Rectangle(x, by - (int)(lh * 2 + 8), iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.Warning, 2);
+            if (why.Length > 0) ui.Paragraph(why, new Rectangle(x, Math.Max(y, by - (int)(lh * 2 + 8)), iw, (int)Math.Min(lh * 2 + 4, Math.Max(lh, by - 4 - Math.Max(y, by - (int)(lh * 2 + 8))))), TextStyle.Secondary, T.Warning, 2);
             if (ui.Button(new Rectangle(x, by, iw, h), canGo ? "YURISH BOSHLASH" : "Yurish mumkin emas", ButtonKind.Danger, canGo, "Qo'shin yo'lga chiqadi; yetib borgach shahar ichida jang, saroyda shoh va vazir"))
                 BeginSiegeMarch(r, w.MapRegions.Where(m => m.IsMine).OrderByDescending(m => m.IsCapital).FirstOrDefault());
         }

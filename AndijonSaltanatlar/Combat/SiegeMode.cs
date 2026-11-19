@@ -8,6 +8,7 @@ using AndijonSaltanatlar.Core.Graphics;
 using AndijonSaltanatlar.Interiors;
 using AndijonSaltanatlar.Military;
 using AndijonSaltanatlar.Shared.DTOs;
+using AndijonSaltanatlar.UI;
 using AndijonSaltanatlar.Units;
 using AndijonSaltanatlar.World;
 using Microsoft.Xna.Framework;
@@ -336,6 +337,7 @@ namespace AndijonSaltanatlar.Combat
             if (!Active) return;
             _time += dt;
             if (_bannerTimer > 0f) _bannerTimer -= dt;
+            if (input != null) _lastTouch = input.IsTouch;
 
             bool inside = _interior.Active;
             if (inside) _interior.Update(dt, input);
@@ -619,6 +621,7 @@ namespace AndijonSaltanatlar.Combat
             if (_map == null) return;
             if (_interior.Active)
             {
+                _interior.TouchUi = _lastTouch;
                 gd.Clear(new Color(20, 16, 14));
                 _interior.Draw(sb, _assets.Pixel, _font, vw, vh, 0f);
                 return;
@@ -646,39 +649,69 @@ namespace AndijonSaltanatlar.Combat
             sb.End();
         }
 
-        /// <summary>Pastdagi buyruq paneli: har qism tugmasi (soni bilan) va "HAMMASI". Yuborilganlar — "JANGDA".</summary>
+        /// <summary>Pastdagi buyruq paneli: har qism tugmasi (soni bilan) va "HAMMASI". Tor ekranda — qisqa nomlar va bir necha qator.</summary>
         private void DrawDeployPanel(SpriteBatch sb, int vw, int vh, int k)
         {
             _groupButtons.Clear();
             if (_phase >= Phase.Captured || _groups.Keys.All(_sent.Contains)) return;
             Texture2D px = _assets.Pixel;
             var present = GroupDefs.Where(g => _groups.ContainsKey(g.Key)).ToList();
-            int s = 2 * k, bh = 34 * k, gap = 8 * k;
-            string title = _phase == Phase.Deploy ? "QAYSI QISM BIRINCHI HUJUMGA BORSIN?" : "KEYINGI QISMNI YUBORING";
-            var labels = present.Select((g, i) => (g.Key, Text: (i + 1) + ". " + g.Label + " (" + _groups[g.Key].Count(u => !u.IsDown) + ")" + (_sent.Contains(g.Key) ? " - JANGDA" : ""))).ToList();
-            labels.Add(("all", "5. HAMMASI BIRGA"));
-            int bs = s;
-            int Width(string t, int sc) => (int)_font.Measure(t, sc).X + 24 * k;
-            while (bs > k && labels.Sum(l => Width(l.Text, bs)) + gap * (labels.Count - 1) > vw - 40) bs--;
-            int total = labels.Sum(l => Width(l.Text, bs)) + gap * (labels.Count - 1);
-            int py = vh - bh - 18 * k - (_combat.Possessed != null ? 150 * k : 0);
-            int th = PixelFont.GH * s + 10 * k;
-            var panel = new Rectangle(vw / 2 - total / 2 - 14 * k, py - th - 10 * k, total + 28 * k, bh + th + 20 * k);
-            sb.Draw(px, new Rectangle(panel.X - 2, panel.Y - 2, panel.Width + 4, panel.Height + 4), new Color(216, 167, 83, 230));
-            sb.Draw(px, panel, new Color(24, 20, 18, 235));
-            _font.DrawCentered(sb, title, new Vector2(vw / 2f, panel.Y + 6 * k + th / 2f), new Color(255, 214, 90), s);
-            int x = vw / 2 - total / 2;
+            int s = 2 * k, bh = 34 * k, gap = 8 * k, maxW = vw - 24 * k;
+            int Width(string t) => (int)_font.Measure(t, s).X + 24 * k;
+            string Label(int i, (string Key, string Label) g, bool shortForm)
+            {
+                int n = _groups[g.Key].Count(u => !u.IsDown);
+                string name = shortForm ? (g.Key == "otliq" ? "OTLIQ" : g.Key == "piyoda" ? "PIYODA" : g.Key == "nayza" ? "NAYZA" : "KAMON") : g.Label;
+                return (i + 1) + ". " + name + " (" + n + ")" + (_sent.Contains(g.Key) ? (shortForm ? " *" : " - JANGDA") : "");
+            }
+            List<(string Key, string Text)> Build(bool shortForm)
+            {
+                var l = present.Select((g, i) => (g.Key, Label(i, g, shortForm))).ToList();
+                l.Add(("all", shortForm ? "5. HAMMASI" : "5. HAMMASI BIRGA"));
+                return l;
+            }
+            var labels = Build(false);
+            if (labels.Sum(l => Width(l.Text)) + gap * (labels.Count - 1) > maxW) labels = Build(true);
+            // Qatorlarga bo'lish (sig'maganlari keyingi qatorga)
+            var rows = new List<List<(string Key, string Text)>> { new List<(string, string)>() };
+            int rowW = 0;
             foreach (var l in labels)
             {
-                int w = Width(l.Text, bs);
-                var r = new Rectangle(x, py, w, bh);
-                bool sent = l.Key != "all" && _sent.Contains(l.Key);
-                Color fill = sent ? new Color(60, 56, 50) : l.Key == "all" ? new Color(150, 40, 30) : new Color(110, 70, 30);
-                sb.Draw(px, new Rectangle(r.X - 1, r.Y - 1, r.Width + 2, r.Height + 2), sent ? new Color(90, 86, 80) : new Color(236, 196, 110));
-                sb.Draw(px, r, fill);
-                _font.DrawCentered(sb, l.Text, r.Center.ToVector2(), sent ? new Color(170, 165, 155) : Color.White, bs);
-                if (!sent) _groupButtons.Add((r, l.Key));
-                x += w + gap;
+                int w = Width(l.Text);
+                if (rows[^1].Count > 0 && rowW + gap + w > maxW) { rows.Add(new List<(string, string)>()); rowW = 0; }
+                rowW += (rows[^1].Count > 0 ? gap : 0) + w;
+                rows[^1].Add(l);
+            }
+            string title = _phase == Phase.Deploy ? "QAYSI QISM BIRINCHI HUJUMGA BORSIN?" : "KEYINGI QISMNI YUBORING";
+            var titleLines = HudText.Wrap(_font, title, s, maxW, 2);
+            int th = (PixelFont.GH * s + 4 * k) * titleLines.Count + 6 * k;
+            int rowsH = rows.Count * bh + (rows.Count - 1) * gap;
+            int widest = Math.Max(rows.Max(r => r.Sum(l => Width(l.Text)) + gap * (r.Count - 1)), titleLines.Max(t => (int)_font.Measure(t, s).X));
+            int bottomPad = _combat.Possessed != null && _lastTouch ? (int)(vh * 0.36f) : 14 * k; // telefonda joystik ustida
+            int py = vh - rowsH - bottomPad;
+            var panel = new Rectangle(vw / 2 - widest / 2 - 12 * k, py - th - 8 * k, widest + 24 * k, rowsH + th + 16 * k);
+            sb.Draw(px, new Rectangle(panel.X - 2, panel.Y - 2, panel.Width + 4, panel.Height + 4), new Color(216, 167, 83, 230));
+            sb.Draw(px, panel, new Color(24, 20, 18, 235));
+            for (int i = 0; i < titleLines.Count; i++)
+                _font.DrawCentered(sb, titleLines[i], new Vector2(vw / 2f, panel.Y + 6 * k + i * (PixelFont.GH * s + 4 * k) + PixelFont.GH * s / 2f), new Color(255, 214, 90), s);
+            int y = py;
+            foreach (var row in rows)
+            {
+                int total = row.Sum(l => Width(l.Text)) + gap * (row.Count - 1);
+                int x = vw / 2 - total / 2;
+                foreach (var l in row)
+                {
+                    int w = Width(l.Text);
+                    var r = new Rectangle(x, y, w, bh);
+                    bool sent = l.Key != "all" && _sent.Contains(l.Key);
+                    Color fill = sent ? new Color(60, 56, 50) : l.Key == "all" ? new Color(150, 40, 30) : new Color(110, 70, 30);
+                    sb.Draw(px, new Rectangle(r.X - 1, r.Y - 1, r.Width + 2, r.Height + 2), sent ? new Color(90, 86, 80) : new Color(236, 196, 110));
+                    sb.Draw(px, r, fill);
+                    _font.DrawCentered(sb, l.Text, r.Center.ToVector2(), sent ? new Color(170, 165, 155) : Color.White, s);
+                    if (!sent) _groupButtons.Add((r, l.Key));
+                    x += w + gap;
+                }
+                y += bh + gap;
             }
         }
 
@@ -704,43 +737,35 @@ namespace AndijonSaltanatlar.Combat
                 sb.Draw(px, lr, new Color(24, 20, 18, 210));
                 _font.DrawCentered(sb, lbl, lr.Center.ToVector2(), new Color(255, 214, 90), 2 * k);
             }
+            int s = 2 * k, maxW = vw - 32 * k;
             string top = "QAMAL: " + _t.RegionName + " (" + _t.FoeName + ")   Qo'shiningiz: " + AliveAttackers + "   Dushman: " + AliveDefenders;
             string goal = _phase < Phase.Captured
-                ? "VAZIFA: saroy eshigiga boring (oltin halqa), ichkarida shoh va vazirni yenging  [shoh " + Math.Max(0, _shahFoe.Hp) + "/" + _shahFoe.MaxHp + "]"
+                ? (vw < 1100 ? "VAZIFA: saroyga kiring, shoh va vazirni yenging" : "VAZIFA: saroy eshigiga boring (oltin halqa), ichkarida shoh va vazirni yenging")
+                  + "  [shoh " + Math.Max(0, _shahFoe.Hp) + "/" + _shahFoe.MaxHp + "]"
                 : _phase == Phase.Captured ? "Saroy olindi!" : "Qamal muvaffaqiyatsiz";
-            int s = 2 * k;
-            int lh = PixelFont.GH * s + 6 * k;
-            int wTop = Math.Min(vw - 16, (int)Math.Max(_font.Measure(top, s).X, _font.Measure(goal, s).X) + 28 * k);
-            int gs = s;
-            while (gs > k && _font.Measure(goal, gs).X > wTop - 20) gs--;
-            var r = new Rectangle(vw / 2 - wTop / 2, 6 * k, wTop, lh * 2 + 8 * k);
+            var topLines = HudText.Wrap(_font, top, s, maxW, 2);
+            var goalLines = HudText.Wrap(_font, goal, s, maxW, 2);
+            int lh = PixelFont.GH * s + 4 * k;
+            float wTop = Math.Max(topLines.Max(l => _font.Measure(l, s).X), goalLines.Max(l => _font.Measure(l, s).X));
+            var r = new Rectangle((int)(vw / 2f - wTop / 2 - 12 * k), 6 * k, (int)wTop + 24 * k, lh * (topLines.Count + goalLines.Count) + 8 * k);
             sb.Draw(px, new Rectangle(r.X - 2, r.Y - 2, r.Width + 4, r.Height + 4), new Color(216, 167, 83, 220));
             sb.Draw(px, r, new Color(24, 20, 18, 225));
-            _font.DrawCentered(sb, top, new Vector2(vw / 2f, r.Y + 4 * k + lh / 2f), new Color(240, 226, 196), s);
-            _font.DrawCentered(sb, goal, new Vector2(vw / 2f, r.Y + 4 * k + lh * 1.5f), new Color(255, 214, 90), gs);
+            int ly = r.Y + 4 * k;
+            foreach (string l in topLines) { _font.DrawCentered(sb, l, new Vector2(vw / 2f, ly + PixelFont.GH * s / 2f), new Color(240, 226, 196), s); ly += lh; }
+            foreach (string l in goalLines) { _font.DrawCentered(sb, l, new Vector2(vw / 2f, ly + PixelFont.GH * s / 2f), new Color(255, 214, 90), s); ly += lh; }
 
             if (_bannerTimer > 0f && _banner != null)
             {
                 float a = Math.Min(1f, _bannerTimer / 0.6f);
-                int bs = 3 * k;
-                while (bs > k && _font.Measure(_banner, bs).X > vw - 40) bs--;
-                Vector2 m = _font.Measure(_banner, bs);
-                var br = new Rectangle((int)(vw / 2f - m.X / 2 - 18 * k), (int)(vh * 0.30f), (int)m.X + 36 * k, (int)m.Y + 20 * k);
+                int bs = HudText.Scale(_font, _banner, 3 * k, 2 * k, maxW);
                 Color bg = _phase == Phase.Defeated ? new Color(90, 26, 24) : _phase < Phase.Captured ? new Color(60, 34, 20) : new Color(28, 90, 46);
-                sb.Draw(px, new Rectangle(br.X - 2, br.Y - 2, br.Width + 4, br.Height + 4), new Color(240, 200, 110) * a);
-                sb.Draw(px, br, bg * (0.92f * a));
-                _font.DrawCentered(sb, _banner, br.Center.ToVector2(), Color.White * a, bs);
+                HudText.Box(sb, px, _font, HudText.Wrap(_font, _banner, bs, maxW, 3), bs, vw / 2f, (int)(vh * 0.30f), bg * (0.92f * a), Color.White * a,
+                    18 * k, 10 * k, new Color(240, 200, 110) * a);
             }
 
             if (_state.MessageTimer > 0f && !string.IsNullOrEmpty(_state.Message))
-            {
-                int ms = 2 * k;
-                while (ms > k && _font.Measure(_state.Message, ms).X > vw - 40) ms--;
-                Vector2 mm = _font.Measure(_state.Message, ms);
-                var mr = new Rectangle((int)(vw / 2f - mm.X / 2 - 10 * k), r.Bottom + 8 * k, (int)mm.X + 20 * k, (int)mm.Y + 10 * k);
-                sb.Draw(px, mr, new Color(16, 14, 12, 200));
-                _font.DrawCentered(sb, _state.Message, mr.Center.ToVector2(), new Color(255, 236, 190), ms);
-            }
+                HudText.Box(sb, px, _font, HudText.Wrap(_font, _state.Message, s, maxW, 3), s, vw / 2f, r.Bottom + 8 * k,
+                    new Color(16, 14, 12, 200), new Color(255, 236, 190), 10 * k, 5 * k);
 
             DrawDeployPanel(sb, vw, vh, k);
             // Telefon: "ICHIGA KIRISH" tugmasi (F klavishi yo'q)
@@ -749,7 +774,7 @@ namespace AndijonSaltanatlar.Combat
                 string pl = "ICHIGA KIRISH";
                 int ps = 2 * k;
                 Vector2 pm = _font.Measure(pl, ps);
-                var pr = new Rectangle(vw - (int)pm.X - 40 * k, vh - (int)pm.Y - 150 * k, (int)pm.X + 28 * k, (int)pm.Y + 24 * k);
+                var pr = new Rectangle(vw - (int)pm.X - 40 * k, (int)(vh * 0.42f), (int)pm.X + 28 * k, (int)pm.Y + 28 * k);
                 sb.Draw(px, new Rectangle(pr.X - 2, pr.Y - 2, pr.Width + 4, pr.Height + 4), new Color(236, 196, 110));
                 sb.Draw(px, pr, new Color(150, 40, 30));
                 _font.DrawCentered(sb, pl, pr.Center.ToVector2(), Color.White, ps);
@@ -759,12 +784,9 @@ namespace AndijonSaltanatlar.Combat
             {
                 string hint = _lastTouch ? "Jangchiga teging va ICHIGA KIRISH - o'zingiz urishing  |  Orqaga - chekinish"
                     : "Jangchini bosing va F - ichiga kirib o'zingiz urishing  |  Esc - chekinish";
-                int hs = 2 * k;
-                while (hs > k && _font.Measure(hint, hs).X > vw - 30) hs--;
-                Vector2 hm = _font.Measure(hint, hs);
-                var hr = new Rectangle((int)(vw / 2f - hm.X / 2 - 10 * k), vh - (int)hm.Y - 26 * k, (int)hm.X + 20 * k, (int)hm.Y + 12 * k);
-                sb.Draw(px, hr, new Color(20, 12, 10, 200));
-                _font.DrawCentered(sb, hint, hr.Center.ToVector2(), new Color(255, 220, 150), hs);
+                var hl = HudText.Wrap(_font, hint, 2 * k, (_lastTouch ? vw * 2 / 3 : vw) - 40 * k, 2);
+                int hh = (PixelFont.GH * 2 * k + 4) * hl.Count + 8 * k;
+                HudText.Box(sb, px, _font, hl, 2 * k, _lastTouch ? vw / 3f + 10 * k : vw / 2f, vh - hh - 14 * k, new Color(20, 12, 10, 200), new Color(255, 220, 150), 10 * k, 4 * k);
             }
         }
     }

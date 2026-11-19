@@ -1272,7 +1272,13 @@ public sealed class Game1 : Game
 		}
 		_ui.AccountName = string.IsNullOrEmpty(displayName) ? "Serversiz" : displayName;
 		if (data == null && welcome != null) _state.ShowMessage(welcome);
-		if (_opt.Map) { _strategicMode = false; _onlinePanel.OpenLocalWorldMap(); } // sinov: serversiz xarita
+		if (_opt.Map)
+		{
+			_strategicMode = false;
+			_onlinePanel.OpenLocalWorldMap(); // sinov: serversiz xarita
+			var pick = _opt.MapPick == null ? null : LocalWorldNow().BuildOverview().MapRegions.FirstOrDefault(r => r.Name == _opt.MapPick);
+			if (pick != null) _onlinePanel.SelectMapRegion(pick.RegionId);
+		}
 		_loginMode = false;
 		_menuMode = false;
 		_frames = 0;
@@ -2598,6 +2604,7 @@ public sealed class Game1 : Game
 		{
 			GraphicsDevice.Clear(new Color(20, 16, 14));
 			Viewport vpIn = GraphicsDevice.Viewport;
+			_interior.TouchUi = _input.IsTouch;
 			_interior.Draw(_sb, _assets.Pixel, _font, vpIn.Width, vpIn.Height, _dayNight.NightAmount);
 		}
 		else
@@ -2951,7 +2958,9 @@ public sealed class Game1 : Game
 	private void DrawVizierPopup()
 	{
 		if (_vizierPopup == null || !_vizierPopup.Active) return;
+		if (_storyOverlay != null && _storyOverlay.DialogueOpen) return; // vazir suhbati ochiq — ustma-ust chiqmasin
 		BeginLegacyUi(out Point v);
+		_vizierPopup.BottomInset = (_ui?.BottomH ?? 44) + 6; // pastki menyu ustida
 		_vizierPopup.Draw(_sb, v.X, v.Y);
 		_sb.End();
 	}

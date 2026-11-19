@@ -106,6 +106,9 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: qamalda dushman shohi darhol yiqiladi (askarlar tomonga o'tadi).</summary>
 	public bool SiegeShahDown;
 
+	/// <summary>Sinov: serversiz xaritada shu nomli qasr tanlangan.</summary>
+	public string MapPick;
+
 	/// <summary>Sinov: kirish oynasida "SERVERSIZ O'YNASH" bosilgandek.</summary>
 	public bool Offline;
 
@@ -337,6 +340,10 @@ public sealed class LaunchOptions
 				break;
 			case "--siege":
 				launchOptions.SiegeRegion = int.Parse(text, CultureInfo.InvariantCulture);
+				i++;
+				break;
+			case "--map-pick":
+				launchOptions.MapPick = text;
 				i++;
 				break;
 			case "--offline":

@@ -50,21 +50,21 @@ namespace AndijonSaltanatlar.Core
         /// <summary>Joystik markazi va radiusi (ekran pikselida).</summary>
         public void StickGeometry(out Vector2 center, out float radius)
         {
-            radius = Math.Max(60f, TouchPadSize.Y * 0.14f);
+            radius = Math.Max(66f, TouchPadSize.Y * 0.15f);
             center = new Vector2(radius * 1.45f, TouchPadSize.Y - radius * 1.45f);
         }
 
         /// <summary>Tugmalar: 0 — ZARBA (Space), 1 — CHIQISH (F), 2 — BOSHQASI (E), 3 — YUGURISH (Shift).</summary>
         public Rectangle PadButton(int i, out string label, out Keys key)
         {
-            float r = Math.Max(60f, TouchPadSize.Y * 0.14f);
-            int big = (int)(r * 1.25f), small = (int)(r * 1.0f);
+            float r = Math.Max(66f, TouchPadSize.Y * 0.15f);
+            int big = (int)(r * 1.25f), small = (int)(r * 1.2f);
             int W = TouchPadSize.X, H = TouchPadSize.Y;
             switch (i)
             {
                 case 0: label = "ZARBA"; key = Keys.Space; return new Rectangle(W - big - (int)(r * 0.45f), H - big - (int)(r * 0.45f), big, big);
-                case 1: label = "CHIQISH"; key = Keys.F; return new Rectangle(W - small - (int)(r * 0.45f), H - big - small - (int)(r * 0.8f), small, small);
-                case 2: label = "BOSHQASI"; key = Keys.E; return new Rectangle(W - big - small - (int)(r * 0.8f), H - small - (int)(r * 0.45f), small, small);
+                case 1: label = "CHIQ"; key = Keys.F; return new Rectangle(W - small - (int)(r * 0.45f), H - big - small - (int)(r * 0.8f), small, small);
+                case 2: label = "BOSHQA"; key = Keys.E; return new Rectangle(W - big - small - (int)(r * 0.8f), H - small - (int)(r * 0.45f), small, small);
                 default: label = "YUGUR"; key = Keys.LeftShift; return new Rectangle(W - big - small - (int)(r * 0.8f), H - 2 * small - (int)(r * 0.8f), small, small);
             }
         }

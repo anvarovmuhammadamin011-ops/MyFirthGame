@@ -1707,17 +1707,19 @@ namespace AndijonSaltanatlar.Interiors
             }
 
             if (_fight) DrawFightOverlay(sb, px, font, m);
-            string hint = _fight ? "WASD yurish | SPACE / sichqoncha - zarba | SHIFT yugurish | eshik - chiqish"
+            string hint = _fight ? (TouchUi ? "Joystik - yurish  |  ZARBA - urish  |  eshik - chiqish" : "WASD yurish | SPACE / sichqoncha - zarba | SHIFT yugurish | eshik - chiqish")
                 : _kind == InteriorKind.House || _palace
                 ? "WASD yurish | SHIFT yugurish | ENTER / ESC yoki eshik - tashqariga chiqish"
                 : "WASD yurish | E harakat | Q ikkinchi harakat | ESC - tashqariga chiqish";
-            Vector2 hs = font.Measure(hint, 2);
-            var hr = new Rectangle(vw / 2 - (int)hs.X / 2 - 16, vh - 40, (int)hs.X + 32, 28);
-            sb.Draw(px, hr, new Color(20, 16, 14, 210));
-            font.DrawCentered(sb, hint, hr.Center.ToVector2(), new Color(220, 205, 175), 2);
+            // Telefonda pastki burchaklar joystik/tugmalarga band — ko'rsatma tepada, tor ekranda qatorlarga bo'linadi
+            bool topHint = TouchUi;
+            var hintLines = AndijonSaltanatlar.UI.HudText.Wrap(font, hint, 2, vw - 40, 2);
+            int hintTop = topHint ? 78 : vh - 12 - (PixelFont.GH * 2 + 4) * hintLines.Count - 8;
+            Rectangle hr = AndijonSaltanatlar.UI.HudText.Box(sb, px, font, hintLines, 2, vw / 2f, hintTop, new Color(20, 16, 14, 210), new Color(220, 205, 175), 16, 4);
 
             if (_state.MessageTimer > 0f && !string.IsNullOrEmpty(_state.Message))
-                Label(sb, px, font, new Vector2(vw / 2f, 90), _state.Message, _state.MessageIsError ? new Color(255, 140, 120) : new Color(150, 230, 150), new Color(0, 0, 0, 170));
+                AndijonSaltanatlar.UI.HudText.Box(sb, px, font, AndijonSaltanatlar.UI.HudText.Wrap(font, _state.Message, 2, vw - 40, 2), 2, vw / 2f, topHint ? hr.Bottom + 6 : 80,
+                    new Color(0, 0, 0, 170), _state.MessageIsError ? new Color(255, 140, 120) : new Color(150, 230, 150), 6, 3);
             sb.End();
         }
 
