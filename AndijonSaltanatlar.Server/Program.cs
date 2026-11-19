@@ -118,6 +118,15 @@ try
     db.Database.EnsureCreated();
     // Mavjud bazaga yangi jadval/ustunlarni qo'shadi (ma'lumot saqlanadi).
     SchemaUpgrader.Upgrade(db, app.Logger);
+    // "Barcha shaharlar AI davlat" rejimi: mavjud dunyolardagi egasiz hududlar viloyat AI davlatlariga beriladi
+    WorldSeeder.AiOwnsAllCities = app.Configuration.GetValue<bool>("World:AiOwnsAllCities");
+    if (WorldSeeder.AiOwnsAllCities)
+    {
+        int filled = 0;
+        foreach (int wid in db.Worlds.Select(w => w.Id).ToList())
+            filled += WorldSeeder.FillNeutralWithAiAsync(db, wid).GetAwaiter().GetResult();
+        app.Logger.LogInformation("Barcha shaharlar AI davlat: {Count} ta egasiz hudud AI davlatlarga berildi.", filled);
+    }
     app.Logger.LogInformation("Ma'lumotlar bazasiga ulanildi ({Provider}).", provider);
 }
 catch (Exception ex)

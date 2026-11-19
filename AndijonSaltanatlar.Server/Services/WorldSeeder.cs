@@ -32,6 +32,67 @@ namespace AndijonSaltanatlar.Server.Services
         /// </summary>
         private static readonly System.Threading.SemaphoreSlim Gate = new System.Threading.SemaphoreSlim(1, 1);
 
+        /// <summary>
+        /// "Barcha shaharlar AI davlat" rejimi (appsettings: World:AiOwnsAllCities). Yoqilganda egasiz hududlar o'z viloyatining
+        /// AI davlatiga beriladi va yangi o'yinchi AI davlatning poytaxt bo'lmagan qishlog'idan boshlaydi.
+        /// </summary>
+        public static bool AiOwnsAllCities { get; set; }
+
+        /// <summary>Dunyodagi egasiz hududlarni viloyat AI davlatlariga beradi (kerakli AI davlatlar yaratiladi). Necha hudud berilgani qaytadi.</summary>
+        public static async Task<int> FillNeutralWithAiAsync(GameDbContext db, int worldId)
+        {
+            var neutral = await db.Regions.Where(x => x.WorldId == worldId && x.OwnerKingdomId == 0).ToListAsync();
+            if (neutral.Count == 0) return 0;
+            var byKey = new Dictionary<string, Kingdom>();
+            int given = 0;
+            foreach (RegionEntity r in neutral)
+            {
+                string key = UzMap.ProvinceKingdom(r.Province);
+                if (key == null) continue;
+                if (!byKey.TryGetValue(key, out Kingdom k))
+                {
+                    MapKingdomSeed ks = UzMap.Kingdoms.Concat(UzMap.ProvinceKingdoms).First(x => x.Key == key);
+                    k = await db.Kingdoms.FirstOrDefaultAsync(x => x.WorldId == worldId && x.Name == ks.Name);
+                    if (k == null)
+                    {
+                        k = new Kingdom { WorldId = worldId, Name = ks.Name, RulerName = ks.Ruler, IsAi = true, ColorR = ks.R, ColorG = ks.G, ColorB = ks.B, AiStrategy = ks.Strategy, Flag = ks.Flag };
+                        db.Kingdoms.Add(k);
+                        await db.SaveChangesAsync();
+                        db.KingdomResources.Add(new KingdomResource { KingdomId = k.Id, Coin = 3000, Food = 800 });
+                    }
+                    byKey[key] = k;
+                }
+                r.OwnerKingdomId = k.Id;
+                given++;
+            }
+            await db.SaveChangesAsync();
+            foreach (Kingdom k in byKey.Values)
+            {
+                var regionIds = await db.Regions.Where(x => x.OwnerKingdomId == k.Id).Select(x => x.Id).ToListAsync();
+                var cities = await db.Cities.Where(c => regionIds.Contains(c.RegionId)).OrderByDescending(c => c.Population).ToListAsync();
+                foreach (CityEntity c in cities) c.KingdomId = k.Id;
+                if (cities.Count > 0 && !cities.Any(c => c.IsCapital)) cities[0].IsCapital = true;
+            }
+            await db.SaveChangesAsync();
+            return given;
+        }
+
+        /// <summary>
+        /// Yangi o'yinchi boshlay oladigan hududlar: egasiz hudud; "barcha shaharlar AI" rejimida — AI davlatning poytaxt bo'lmagan
+        /// qishlog'i ham (AI davlatda boshqa hudud qolsa). Shunday qilib yangi o'yinchilarga joy tugamaydi.
+        /// </summary>
+        public static async Task<List<RegionEntity>> StartableRegionsAsync(GameDbContext db, int worldId, bool? includeAiVillages = null)
+        {
+            var regions = await db.Regions.AsNoTracking().Where(r => r.WorldId == worldId).ToListAsync();
+            if (!(includeAiVillages ?? AiOwnsAllCities)) return regions.Where(r => r.OwnerKingdomId == 0).ToList();
+            var ai = new HashSet<int>(await db.Kingdoms.AsNoTracking().Where(k => k.WorldId == worldId && k.IsAi).Select(k => k.Id).ToListAsync());
+            var ids = regions.Select(r => r.Id).ToList();
+            var capitalRegions = new HashSet<int>(await db.Cities.AsNoTracking().Where(c => c.IsCapital && ids.Contains(c.RegionId)).Select(c => c.RegionId).ToListAsync());
+            var counts = regions.GroupBy(r => r.OwnerKingdomId).ToDictionary(g => g.Key, g => g.Count());
+            return regions.Where(r => r.OwnerKingdomId == 0
+                || (ai.Contains(r.OwnerKingdomId) && !capitalRegions.Contains(r.Id) && counts[r.OwnerKingdomId] > 1)).ToList();
+        }
+
         public static async Task SeedAsync(GameDbContext db, World w)
         {
             if (w.MapVersion >= UzMap.Version) return;
@@ -108,6 +169,7 @@ namespace AndijonSaltanatlar.Server.Services
                 names.Add(s.Name);
             }
             await db.SaveChangesAsync();
+            if (AiOwnsAllCities) await FillNeutralWithAiAsync(db, worldId);
         }
 
         private static IEnumerable<(string, int)> AiStock(string key) => key switch
@@ -139,7 +201,7 @@ namespace AndijonSaltanatlar.Server.Services
             try
             {
                 if (await db.Cities.AnyAsync(c => c.KingdomId == k.Id)) return;
-                var free = await db.Regions.Where(r => r.WorldId == k.WorldId && r.OwnerKingdomId == 0).ToListAsync();
+                var free = (await StartableRegionsAsync(db, k.WorldId)).OrderBy(r => r.OwnerKingdomId == 0 ? 0 : 1).ToList();
                 RegionEntity pick = UzMap.PreferredStarts.Select(n => free.FirstOrDefault(r => r.Name == n)).FirstOrDefault(r => r != null)
                     ?? free.Where(r => r.Province == "an").OrderBy(r => r.Id).FirstOrDefault()
                     ?? free.OrderBy(r => r.Id).FirstOrDefault();
@@ -153,7 +215,7 @@ namespace AndijonSaltanatlar.Server.Services
         /// O'yinchi xaritadan tanlagan boshlang'ich hudud. Faqat mustaqil (hech kimga tegishli bo'lmagan) hudud
         /// va faqat saltanatning hali shahri bo'lmasa. Natija: null — muvaffaqiyat, aks holda sabab (o'zbekcha).
         /// </summary>
-        public static async Task<string> ChooseStartAsync(GameDbContext db, Kingdom k, int regionId)
+        public static async Task<string> ChooseStartAsync(GameDbContext db, Kingdom k, int regionId, bool? includeAiVillages = null)
         {
             await Gate.WaitAsync();
             try
@@ -161,7 +223,8 @@ namespace AndijonSaltanatlar.Server.Services
                 if (await db.Cities.AnyAsync(c => c.KingdomId == k.Id)) return "Saltanatingizning yurti allaqachon bor.";
                 RegionEntity r = await db.Regions.FirstOrDefaultAsync(x => x.Id == regionId && x.WorldId == k.WorldId);
                 if (r == null) return "Hudud topilmadi.";
-                if (r.OwnerKingdomId != 0) return r.Name + " band — boshqa mustaqil hududni tanlang.";
+                if (r.OwnerKingdomId != 0 && !(await StartableRegionsAsync(db, k.WorldId, includeAiVillages)).Any(x => x.Id == r.Id))
+                    return r.Name + " band — boshqa mustaqil hududni tanlang.";
                 await TakeRegionAsync(db, k, r);
                 return null;
             }
@@ -171,7 +234,8 @@ namespace AndijonSaltanatlar.Server.Services
         private static async Task TakeRegionAsync(GameDbContext db, Kingdom k, RegionEntity r)
         {
             // Shartli yangilash: boshqa so'rov shu hududni oldinroq olgan bo'lsa — 0 qator.
-            int changed = await db.Regions.Where(x => x.Id == r.Id && x.OwnerKingdomId == 0)
+            int expected = r.OwnerKingdomId; // egasiz (0) yoki joy beradigan AI davlat
+            int changed = await db.Regions.Where(x => x.Id == r.Id && x.OwnerKingdomId == expected)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, k.Id).SetProperty(x => x.Stability, 70));
             if (changed == 0) throw new InvalidOperationException("Hudud band.");
             db.Entry(r).State = EntityState.Detached;

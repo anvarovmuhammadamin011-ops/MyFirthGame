@@ -155,6 +155,49 @@ namespace AndijonSaltanatlar.Tests
         }
 
         [Fact]
+        public async Task AllCitiesAi_NeutralRegionsGoToProvinceAi_NewPlayerStartsInAiVillage()
+        {
+            Kingdom me = await Player("andijon");
+            int given;
+            using (GameDbContext db = NewDb()) given = await WorldSeeder.FillNeutralWithAiAsync(db, me.WorldId);
+            Assert.True(given > 0);
+            using (GameDbContext db = NewDb())
+            {
+                Assert.False(await db.Regions.AnyAsync(r => r.WorldId == me.WorldId && r.OwnerKingdomId == 0)); // egasiz hudud qolmadi
+                var aiIds = await db.Kingdoms.Where(k => k.WorldId == me.WorldId && k.IsAi).Select(k => k.Id).ToListAsync();
+                foreach (var r in await db.Regions.Where(r => r.WorldId == me.WorldId).ToListAsync())
+                    Assert.All(await db.Cities.Where(c => c.RegionId == r.Id).ToListAsync(), c => Assert.Equal(r.OwnerKingdomId, c.KingdomId));
+                foreach (int ai in aiIds.Where(id => db.Regions.Any(r => r.OwnerKingdomId == id)))
+                    Assert.Single(await db.Cities.Where(c => c.KingdomId == ai && c.IsCapital).ToListAsync()); // har AI davlatda poytaxt
+            }
+
+            // Yangi o'yinchi: AI davlatning poytaxt bo'lmagan qishlog'idan boshlaydi
+            Kingdom newbie;
+            using (GameDbContext db = NewDb())
+            {
+                var u = new AppUser { Username = "yangi", Email = "yangi@t", PasswordHash = "", CreatedAt = _clock.UtcNow };
+                db.Users.Add(u);
+                await db.SaveChangesAsync();
+                newbie = await new OnlineGameService(db, _clock).JoinAsync(u.Id, new JoinWorldRequest { WorldId = me.WorldId, ChooseStart = true });
+            }
+            RegionEntity village;
+            using (GameDbContext db = NewDb())
+            {
+                var startable = await WorldSeeder.StartableRegionsAsync(db, me.WorldId, includeAiVillages: true);
+                Assert.NotEmpty(startable);
+                var capitals = await db.Cities.Where(c => c.IsCapital).Select(c => c.RegionId).ToListAsync();
+                Assert.DoesNotContain(startable, r => capitals.Contains(r.Id));
+                village = startable.First();
+                Assert.Null(await WorldSeeder.ChooseStartAsync(db, newbie, village.Id, includeAiVillages: true));
+            }
+            using (GameDbContext db = NewDb())
+            {
+                Assert.Equal(newbie.Id, (await db.Regions.SingleAsync(r => r.Id == village.Id)).OwnerKingdomId);
+                Assert.Contains(await db.Cities.Where(c => c.RegionId == village.Id).ToListAsync(), c => c.KingdomId == newbie.Id && c.IsCapital);
+            }
+        }
+
+        [Fact]
         public async Task CannotSiegeOwnCastle()
         {
             Kingdom me = await Player("andijon");

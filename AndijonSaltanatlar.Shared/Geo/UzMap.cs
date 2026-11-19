@@ -141,6 +141,31 @@ namespace AndijonSaltanatlar.Shared.Geo
             new("qoqon", "Qo'qon xonligi", "Olimxon", 90, 115, 45, "aggressive", "2-5-0-5-5-1"),
         };
 
+        /// <summary>
+        /// Viloyat begliklari — "barcha shaharlar AI davlat" rejimida (server sozlamasi World:AiOwnsAllCities)
+        /// egasiz hududlar shularga beriladi. Har viloyatning o'z AI davlati bor.
+        /// </summary>
+        public static readonly MapKingdomSeed[] ProvinceKingdoms =
+        {
+            new("qongirot", "Qo'ng'irot biyligi", "To'ra biy", 70, 130, 160, "defensive", "4-11-6-0-4-0"),
+            new("karmana", "Karmana begligi", "Doniyorbiy", 160, 120, 60, "trade", "5-8-0-2-2-0"),
+            new("samarqand", "Samarqand begligi", "Ulug'bek", 40, 90, 160, "balanced", "6-3-6-0-1-2"),
+            new("shahrisabz", "Shahrisabz begligi", "Jo'rabek", 150, 50, 90, "aggressive", "8-1-0-3-5-0"),
+            new("termiz", "Termiz begligi", "Sayyid Alibek", 180, 140, 40, "defensive", "9-6-6-1-0-0"),
+            new("jizzax", "Jizzax begligi", "Yorqinbek", 100, 140, 70, "balanced", "3-4-0-4-3-0"),
+            new("sirdaryo", "Sirdaryo begligi", "Erkinbek", 60, 150, 120, "trade", "2-10-6-0-2-0"),
+            new("toshkent", "Toshkent begligi", "Yunusxo'ja", 170, 60, 60, "aggressive", "1-7-0-1-4-3"),
+            new("namangan", "Namangan begligi", "Rahmonqulbek", 80, 80, 150, "balanced", "6-12-6-0-3-0"),
+        };
+
+        /// <summary>Viloyatning egasiz hududlari qaysi AI davlatga tegishli (Kingdoms yoki ProvinceKingdoms kaliti).</summary>
+        public static string ProvinceKingdom(string province) => province switch
+        {
+            "qq" => "qongirot", "xr" => "xiva", "nv" => "karmana", "bx" => "buxoro", "sm" => "samarqand",
+            "qd" => "shahrisabz", "sx" => "termiz", "jz" => "jizzax", "sr" => "sirdaryo", "tv" => "toshkent",
+            "nm" => "namangan", "fg" => "fargona", "an" => "andijon", _ => null
+        };
+
         // ------------------------------------------------------------------ Hududlar (har biri — bitta shahar)
         public static readonly MapRegionSeed[] Regions =
         {

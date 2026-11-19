@@ -176,13 +176,14 @@ namespace AndijonSaltanatlar.Server.Services
             {
                 SuggestedName = me.Name, Flag = WorldSeeder.FlagOf(me), Color = new[] { me.ColorR, me.ColorG, me.ColorB }
             };
+            var startable = new HashSet<int>((await WorldSeeder.StartableRegionsAsync(_db, me.WorldId)).Select(r => r.Id));
             foreach (RegionEntity r in regions)
             {
                 kingdoms.TryGetValue(r.OwnerKingdomId, out Kingdom o);
                 dto.Regions.Add(new StartRegionDto
                 {
                     RegionId = r.Id, Name = r.Name, Province = r.Province, MapX = (float)r.Latitude, MapY = (float)r.Longitude,
-                    Population = pops.GetValueOrDefault(r.Id), Free = r.OwnerKingdomId == 0,
+                    Population = pops.GetValueOrDefault(r.Id), Free = startable.Contains(r.Id),
                     OwnerKingdomId = r.OwnerKingdomId, OwnerName = o?.Name ?? "Mustaqil", OwnerIsAi = o?.IsAi ?? true,
                     Color = o == null ? new[] { 150, 150, 150 } : new[] { o.ColorR, o.ColorG, o.ColorB }, Flag = WorldSeeder.FlagOf(o)
                 });
@@ -200,9 +201,10 @@ namespace AndijonSaltanatlar.Server.Services
         {
             await EnsureWorldAsync(worldId);
             var regions = await _db.Regions.AsNoTracking().Where(r => r.WorldId == worldId).ToListAsync();
-            var free = regions.FindAll(r => r.OwnerKingdomId == 0);
+            var startable = new HashSet<int>((await WorldSeeder.StartableRegionsAsync(_db, worldId)).Select(r => r.Id));
+            var free = regions.FindAll(r => startable.Contains(r.Id));
             if (free.Count == 0) return new List<int>();
-            var occupied = regions.FindAll(r => r.OwnerKingdomId != 0);
+            var occupied = regions.FindAll(r => !startable.Contains(r.Id));
             var ids = regions.ConvertAll(r => r.Id);
             var pops = await _db.Cities.AsNoTracking().Where(c => ids.Contains(c.RegionId))
                 .GroupBy(c => c.RegionId).Select(g => new { g.Key, Pop = g.Sum(c => c.Population) })
