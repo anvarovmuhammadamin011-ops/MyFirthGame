@@ -513,8 +513,10 @@ namespace AndijonSaltanatlar.Combat
                 if (!(u is CitizenUnit c) || c.IsDown || c.Hidden || c == Possessed) continue;
                 if (_agents.TryGetValue(c, out Agent existing) && existing.Mode != AgentMode.Returning) continue;
                 if (existing == null && c.ExternallyControlled) continue; // boshqa tizim band qilgan (masalan suhbat)
-                Unit raider = NearestEnemy(c, CitizenPanicRange);
-                if (raider == null) continue;
+                // Alarm chalinganda (bosqin yaqinlashganda yoki boshlanganda) — BARCHA fuqaro uyiga qochadi.
+                // Aks holda faqat dushmanni yaqinda ko'rgan fuqaro qochadi.
+                bool alarm = RaidActive || RaidIncoming;
+                if (!alarm && NearestEnemy(c, CitizenPanicRange) == null) continue;
 
                 Agent a = existing ?? new Agent { Unit = c, Home = c.Position, Mode = AgentMode.Fleeing };
                 _agents[c] = a;
@@ -604,6 +606,10 @@ namespace AndijonSaltanatlar.Combat
             {
                 UpdateDefenderAwareness(dt);
                 UpdateCitizenPanic(dt);
+            }
+            else if (RaidIncoming)
+            {
+                UpdateCitizenPanic(dt); // alarm chalindi — xalq dushman kelishidan oldin uyiga qochadi
             }
 
             // Agentlar (AI boshqaruvidagi unitlar)
@@ -1217,6 +1223,19 @@ namespace AndijonSaltanatlar.Combat
                 font.Draw(sb, f.Text, p, f.Color * alpha, scale);
             }
 
+            // --- ALARM (urush qo'ng'irog'i): qizil chaqnagan chekkalar va chalinayotgan qo'ng'iroq ---
+            if (RaidIncoming || RaidActive)
+            {
+                float pulse = (MathF.Sin(System.Environment.TickCount / 150f) + 1f) / 2f;
+                Color edge = new Color(205, 32, 24) * (0.16f + 0.30f * pulse);
+                int th = 10 * _k;
+                sb.Draw(px, new Rectangle(0, 0, vw, th), edge);
+                sb.Draw(px, new Rectangle(0, vh - th, vw, th), edge);
+                sb.Draw(px, new Rectangle(0, 0, th, vh), edge);
+                sb.Draw(px, new Rectangle(vw - th, 0, th, vh), edge);
+                DrawAlarmBell(sb, px, 16 * _k, 14 * _k, _k, pulse);
+            }
+
             // --- Bosqin banneri ---
             if (RaidIncoming)
             {
@@ -1333,6 +1352,32 @@ namespace AndijonSaltanatlar.Combat
             sb.Draw(px, new Rectangle(r.X - 2, r.Y - 2, r.Width + 4, r.Height + 4), new Color(20, 12, 10, 220));
             sb.Draw(px, r, bg);
             font.DrawCentered(sb, text, r.Center.ToVector2(), fg, sc);
+        }
+
+        /// <summary>Chalinayotgan qo'ng'iroq belgisi (ovoz tizimi yo'q — vizual alarm). Yon tebranadi va tovush to'lqinlari chiqaradi.</summary>
+        private static void DrawAlarmBell(SpriteBatch sb, Texture2D px, int x, int y, int k, float pulse)
+        {
+            int sway = (int)(MathF.Sin(System.Environment.TickCount / 85f) * 2.5f * k);
+            Color gold = new Color(240, 200, 96), dark = new Color(60, 44, 20);
+            int cx = x + sway;
+            // dastak
+            sb.Draw(px, new Rectangle(cx + 6 * k, y, 2 * k, 2 * k), dark);
+            // tanasi (yuqoridan pastga kengayadi)
+            sb.Draw(px, new Rectangle(cx + 5 * k, y + 2 * k, 4 * k, 3 * k), gold);
+            sb.Draw(px, new Rectangle(cx + 3 * k, y + 5 * k, 8 * k, 4 * k), gold);
+            sb.Draw(px, new Rectangle(cx + 1 * k, y + 9 * k, 12 * k, 4 * k), gold);
+            // labi va tili
+            sb.Draw(px, new Rectangle(cx, y + 13 * k, 14 * k, 2 * k), dark);
+            sb.Draw(px, new Rectangle(cx + 6 * k, y + 14 * k, 2 * k, 3 * k), dark);
+            // tovush to'lqinlari (pulse bilan)
+            if (pulse > 0.45f)
+            {
+                Color wave = new Color(255, 232, 150) * ((pulse - 0.45f) * 1.8f);
+                sb.Draw(px, new Rectangle(x - 4 * k, y + 5 * k, 2 * k, k), wave);
+                sb.Draw(px, new Rectangle(x - 7 * k, y + 8 * k, 3 * k, k), wave);
+                sb.Draw(px, new Rectangle(x + 16 * k, y + 5 * k, 2 * k, k), wave);
+                sb.Draw(px, new Rectangle(x + 17 * k, y + 8 * k, 3 * k, k), wave);
+            }
         }
 
         private void DrawPossessionPanel(SpriteBatch sb, Texture2D px, PixelFont font, int vw, int vh)
