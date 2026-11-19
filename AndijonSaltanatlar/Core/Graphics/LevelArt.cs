@@ -28,7 +28,8 @@ namespace AndijonSaltanatlar.Core.Graphics
             int tileH = size * GameConfig.TileHeight;
             int baseH = Math.Max(0, baseArt.Height - tileH);
             bool big = size >= 2;
-            int podium = big ? (level >= 5 ? 10 : level >= 4 ? 7 : 0) : 0;
+            // Poydevor har darajada o'sadi — bino har upgrade'da ko'rinarli kattalashadi (2-darajadan boshlab).
+            int podium = big ? (level >= 5 ? 12 : level >= 4 ? 9 : level >= 3 ? 6 : level >= 2 ? 3 : 0) : 0;
             float towerH = big && level >= 4 ? Math.Max(baseH * (style == 2 ? 1.05f : 0.85f), 46f) + (level >= 5 ? 16f : 6f) : 0f;
             if (style == 1) towerH *= 0.55f;   // shiyponlar pastroq
             float top = Math.Max(baseH, towerH + (level >= 5 ? 26f : 12f)) + podium;

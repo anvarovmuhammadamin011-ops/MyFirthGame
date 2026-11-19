@@ -121,8 +121,8 @@ namespace AndijonSaltanatlar.Core
             Register(SpriteKeys.Market, BuildingArt.Market);
             Register(SpriteKeys.MainHall, () => BuildingArt.MainHall());
             Register(SpriteKeys.Barracks, BuildingArt.Barracks);
-            Register(SpriteKeys.Garden, BuildingArt.Garden);
-            Register(SpriteKeys.Farm, BuildingArt.Farm);
+            Register(SpriteKeys.Garden, () => BuildingArt.Garden());
+            Register(SpriteKeys.Farm, () => BuildingArt.Farm());
             Register(SpriteKeys.GladiatorArena, BuildingArt.GladiatorArena);
             Register(SpriteKeys.Madrasa, BuildingArt.Madrasa);
             Register(SpriteKeys.Mosque, BuildingArt.Mosque);
@@ -130,8 +130,8 @@ namespace AndijonSaltanatlar.Core
             // Qolgan barcha binolar ham 5-darajagacha kattalashadi
             RegisterLevels(SpriteKeys.Market, 4, _ => BuildingArt.Market());
             RegisterLevels(SpriteKeys.Barracks, 3, _ => BuildingArt.Barracks());
-            RegisterLevels(SpriteKeys.Garden, 3, _ => BuildingArt.Garden());
-            RegisterLevels(SpriteKeys.Farm, 4, _ => BuildingArt.Farm());
+            RegisterLevels(SpriteKeys.Garden, 3, l => BuildingArt.Garden(l), 5); // tabiatga mos daraja (minora emas)
+            RegisterLevels(SpriteKeys.Farm, 4, l => BuildingArt.Farm(l), 5);     // tabiatga mos daraja (minora emas)
             RegisterLevels(SpriteKeys.GladiatorArena, 5, _ => BuildingArt.GladiatorArena());
             RegisterLevels(SpriteKeys.Madrasa, 4, _ => BuildingArt.Madrasa());
             RegisterLevels(SpriteKeys.Mosque, 4, _ => BuildingArt.Mosque());

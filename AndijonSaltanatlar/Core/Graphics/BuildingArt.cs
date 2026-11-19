@@ -484,9 +484,9 @@ namespace AndijonSaltanatlar.Core.Graphics
         // =====================================================================
         //  BOG' (3x3) — chorbog': hovuzcha, mevali daraxtlar, gullar
         // =====================================================================
-        public static Canvas Garden()
+        public static Canvas Garden(int level = 1)
         {
-            var ic = new IsoCanvas(3, 62);
+            var ic = new IsoCanvas(3, level >= 4 ? 88 : level >= 3 ? 72 : 62);
             Color w = Pal.Mud;
             ic.Top(0.08f, 0.08f, 2.92f, 2.92f, 0, new Color(118, 162, 84), 0.10f);
             // yo'lakchalar (chorbog' xochi)
@@ -526,13 +526,24 @@ namespace AndijonSaltanatlar.Core.Graphics
             ic.Box(2.8f, 0.2f, 2.92f, 2.8f, 0, 9, w);
             ic.Box(0.2f, 2.8f, 1.3f, 2.92f, 0, 9, w);
             ic.Box(1.7f, 2.8f, 2.92f, 2.92f, 0, 9, w);
+            // Daraja: bog' boyib boradi — ko'proq daraxt/gul, so'ri va gumbazli ayvoncha (minora emas)
+            if (level >= 2) { T(1.5f, 0.5f, 2, 0.8f); T(1.5f, 2.55f, 0, 0.8f); }
+            if (level >= 3) ic.Box(0.3f, 1.2f, 0.95f, 1.8f, 0, 6, Pal.Wood, 0, Canvas.Shade(Pal.Wood, 1.12f)); // so'ri (dam olish supasi)
+            if (level >= 4)
+            {
+                // gumbazli ayvoncha (hovuz ustida)
+                foreach (var pp in new[] { new Vector2(1.18f, 1.18f), new Vector2(1.82f, 1.18f), new Vector2(1.18f, 1.82f), new Vector2(1.82f, 1.82f) })
+                    ic.Pole(pp.X, pp.Y, 6, 20, Pal.Wood, 1);
+                ic.Box(1.12f, 1.12f, 1.88f, 1.88f, 20, 23, Pal.Plaster, 0, level >= 5 ? Pal.Gold : Pal.Turquoise);
+                ic.Dome(1.5f, 1.5f, 23, 12, 14, level >= 5 ? Pal.Gold : Pal.Turquoise, 4, true);
+            }
             ic.C.Outline(Outline, 0.45f);
             return ic.C;
         }
 
-        public static Canvas Farm()
+        public static Canvas Farm(int level = 1)
         {
-            var ic = new IsoCanvas(4, 58);
+            var ic = new IsoCanvas(4, level >= 4 ? 82 : level >= 3 ? 70 : 58);
             Color soil = new Color(112, 78, 47);
             ic.Top(0.06f, 0.06f, 3.94f, 3.94f, 0, new Color(116, 145, 70), 0.05f);
             ic.Top(0.34f, 0.34f, 3.66f, 3.66f, 0, soil);
@@ -545,6 +556,21 @@ namespace AndijonSaltanatlar.Core.Graphics
             }
             ic.Box(3.28f, 0.24f, 3.78f, 0.38f, 0, 12, Pal.Wood, 3);
             ic.Box(3.72f, 0.24f, 3.86f, 3.72f, 0, 12, Pal.Wood, 3);
+            // Daraja: ferma kengayadi — qarovul, ombor va shiypon (minora emas)
+            if (level >= 2)
+            {
+                // qarovul (scarecrow)
+                ic.Pole(0.62f, 3.4f, 0, 16, Pal.Wood, 1);
+                ic.QuadSW(0.34f, 0.9f, 3.4f, 11, 12, Pal.Wood);
+                ic.Box(0.52f, 3.3f, 0.72f, 3.5f, 15, 19, new Color(206, 176, 112));
+            }
+            if (level >= 3) ic.Box(0.28f, 0.28f, 1.12f, 1.12f, 0, 15, new Color(150, 100, 60), 7, new Color(122, 82, 46)); // ombor
+            if (level >= 4)
+            {
+                // kattaroq ombor va tom
+                ic.Box(0.26f, 0.26f, 1.34f, 1.34f, 0, 21, new Color(158, 106, 64), 7, new Color(126, 84, 48));
+                ic.Box(0.18f, 0.18f, 1.42f, 1.42f, 21, 25, level >= 5 ? Pal.Gold : new Color(112, 74, 42));
+            }
             ic.C.Outline(Outline, 0.45f);
             return ic.C;
         }
