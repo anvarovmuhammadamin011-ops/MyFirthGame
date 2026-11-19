@@ -104,8 +104,8 @@ namespace AndijonSaltanatlar.Core
             {
                 int v = i;
                 Register(SpriteKeys.House + "_" + i, () => BuildingArt.House(v));
-                // Darajali ko'rinishlar: key_l2..key_l5 (WorldRenderer bino darajasiga qarab tanlaydi)
-                RegisterLevels(SpriteKeys.House + "_" + i, 2, l => BuildingArt.House(v, l), 3);
+                // Darajali ko'rinishlar: key_l2..key_l5 — har daraja uyga xos (minora qo'shmaydi), uy kattalashadi
+                RegisterLevels(SpriteKeys.House + "_" + i, 2, l => BuildingArt.House(v, l), 5);
             }
             Register(SpriteKeys.Tower, () => BuildingArt.Tower());
             Register(SpriteKeys.Wall, () => BuildingArt.Wall());

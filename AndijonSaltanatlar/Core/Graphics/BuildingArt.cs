@@ -22,10 +22,13 @@ namespace AndijonSaltanatlar.Core.Graphics
         /// </summary>
         public static Canvas House(int v, int level = 1)
         {
-            var ic = new IsoCanvas(2, level >= 3 ? 78 : 56);
+            var ic = new IsoCanvas(2, level >= 5 ? 108 : level >= 4 ? 94 : level >= 3 ? 78 : 56);
             Color wall = v switch { 0 => Pal.Mud, 1 => Pal.BrickPale, 2 => Pal.Plaster, _ => Pal.MudDark };
             Color roof = Canvas.Shade(wall, 0.92f);
             float mh = v == 1 ? 32 : (v == 3 ? 26 : 29);
+            // 4-5 daraja: uy balandlashadi (kattalashadi) — minora emas, uyga xos qavatlar
+            if (level >= 4) mh += 9;
+            if (level >= 5) mh += 8;
             // Har bir uy turi o'z ranglari va shakliga ega — yuqori darajada ham bir xil bo'lib qolmaydi
             Color band = v switch { 0 => Pal.Turquoise, 1 => Pal.Blue, 2 => new Color(70, 150, 96), _ => Pal.Red };
             Color dome = v switch { 0 => Pal.Turquoise, 1 => Pal.Blue, 2 => new Color(70, 150, 96), _ => Pal.Gold };
@@ -81,6 +84,21 @@ namespace AndijonSaltanatlar.Core.Graphics
             {
                 // kichik gumbazcha
                 ic.Dome(1.3f, 0.6f, mh, 12, 11, Pal.BrickPale, 0, false);
+            }
+            if (level >= 4)
+            {
+                // Ikkinchi gumbaz (qarama-qarshi tomonda) va oltin belbog' — uy hashamatlashadi
+                float dX2 = rightLoft ? 1.45f : 0.55f;
+                ic.Cylinder(dX2, 0.62f, mh, mh + 3, 8, Pal.Plaster);
+                ic.Dome(dX2, 0.62f, mh + 3, 8, 11, Canvas.Shade(dome, 0.92f), 6, true);
+                ic.QuadSW(0.2f, 1.8f, 1.0f, mh - 1, mh, Pal.Gold);
+            }
+            if (level >= 5)
+            {
+                // Oliy daraja: yiriklashgan oltin gumbaz uchi va oltin bayroq (uyga xos toj, minora emas)
+                ic.Dome(domeX, 0.6f, mh + 4, 12, 15, Pal.Gold, 6, true);
+                ic.Pole(1.0f, 0.95f, mh + 15, mh + 30, Pal.Wood, 1);
+                ic.Flag(1.0f, 0.95f, mh + 30, Pal.Gold, 11, 7);
             }
 
             // yon xona (chap-old)
