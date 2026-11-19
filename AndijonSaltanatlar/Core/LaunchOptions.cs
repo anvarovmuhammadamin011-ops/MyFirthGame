@@ -100,6 +100,12 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: jang maydoni (mashq jangi) darhol ochiladi.</summary>
 	public bool Arena;
 
+	/// <summary>Sinov: TABS jangni darhol boshlash (joylashtirishsiz).</summary>
+	public bool ArenaFight;
+
+	/// <summary>Sinov: TABS jangda birinchi jangchi ichiga kirish.</summary>
+	public bool ArenaPossess;
+
 	/// <summary>Sinov: kirish ekrani bosqichi (login, profile, welcome) — skrinshot uchun.</summary>
 	public string AuthStage;
 
@@ -313,6 +319,15 @@ public sealed class LaunchOptions
 				break;
 			case "--arena":
 				launchOptions.Arena = true;
+				break;
+			case "--arena-fight":
+				launchOptions.Arena = true;
+				launchOptions.ArenaFight = true;
+				break;
+			case "--arena-possess":
+				launchOptions.Arena = true;
+				launchOptions.ArenaFight = true;
+				launchOptions.ArenaPossess = true;
 				break;
 			case "--full-upgrade":
 				launchOptions.FullUpgrade = true;

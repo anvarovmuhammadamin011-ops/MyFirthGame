@@ -333,8 +333,7 @@ public sealed class Game1 : Game
 		}
 		if (_opt.Arena)
 		{
-
-			_arena.Start();
+			if (_arena.Start() && _opt.ArenaFight) _arena.TestBeginFight(_opt.ArenaPossess);
 		}
 		if (_opt.Tab != null)
 		{
@@ -1590,7 +1589,7 @@ public sealed class Game1 : Game
 		else if (_arena.Active)
 		{
 			// Jang maydoni: tugmalar sahnaning o'zida (UiKit, Draw paytida) — bu yerda faqat Esc
-			if (_input.KeyPressed(Keys.Escape)) _arena.Close();
+			if (_input.KeyPressed(Keys.Escape)) _arena.Escape();
 		}
 		else if (_strategicMode)
 		{
@@ -1762,7 +1761,7 @@ public sealed class Game1 : Game
 		}
 		// Jang real vaqtda (o'yin tezligiga bog'liq emas), pauzada to'xtaydi.
 		// Kiritish faqat shahar ekranida va hech qanday panel/dialog ochiq bo'lmaganda beriladi.
-		bool combatInput = !onlineOpen && !_strategicMode && !_civMode && !_questMode
+		bool combatInput = !onlineOpen && !_strategicMode && !_civMode && !_questMode && !_arena.Active
 			&& !(_storyOverlay != null && _storyOverlay.DialogueOpen)
 			&& !(_ui.GovernorPanel != null && _ui.GovernorPanel.IsOpen);
 		bool wasInHouse = _interior.Active;
@@ -2116,6 +2115,8 @@ public sealed class Game1 : Game
 
 	private void HandleHotkeys()
 	{
+		// Jang maydoni (TABS) ochiq — klaviatura faqat jangga tegishli.
+		if (_arena != null && _arena.Active) return;
 		// Jangchi ichida: klaviatura to'liq jangchiga tegishli (boshqaruvni CombatSystem o'qiydi).
 		if (_combat.Possessed != null)
 		{

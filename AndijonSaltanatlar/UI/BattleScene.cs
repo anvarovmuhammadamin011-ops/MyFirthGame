@@ -39,11 +39,6 @@ namespace AndijonSaltanatlar.UI
 
         public BattleDecision SelectedDecision => _selected ?? BattleDecision.Muvozanatli;
 
-        /// <summary>TABS uslubi: strategiya tugmalari ko'rsatilmaydi, jang o'zi kechadi; pastda qo'shin qo'shish tray'i (ArenaController chizadi).</summary>
-        public bool AutoPlay;
-        /// <summary>AutoPlay'da pastki tray uchun ajratilgan balandlik (ArenaController o'qiydi).</summary>
-        public int TrayHeight { get; private set; }
-
         public BattleScene(AssetManager assets) { _assets = assets; }
 
         private struct Figure
@@ -113,10 +108,7 @@ namespace AndijonSaltanatlar.UI
             BattleSceneAction act = BattleSceneAction.None;
             float s = Math.Max(1f, vh / 720f);         // sahna masshtabi (telefon/PC)
             int topH = (int)(ui.Type.LineHeight(TextStyle.PanelTitle) * 2.6f + 24);
-            int panelH = b.Status == BattleStatus.Completed ? 0
-                : AutoPlay ? (int)(ui.ControlH + 18)
-                : (int)(ui.ControlH * 2.7f + ui.Gap * 3 + ui.Type.LineHeight(TextStyle.Secondary) + 10);
-            TrayHeight = AutoPlay ? panelH : 0;
+            int panelH = b.Status == BattleStatus.Completed ? 0 : (int)(ui.ControlH * 2.7f + ui.Gap * 3 + ui.Type.LineHeight(TextStyle.Secondary) + 10);
             var field = new Rectangle(0, topH, vw, vh - topH - panelH);
 
             // ---- Fon: osmon, uzoq tog'lar, shahar siluetlari ----
@@ -137,10 +129,7 @@ namespace AndijonSaltanatlar.UI
 
             // ---- Pastki qaror paneli yoki natija oynasi ----
             if (b.Status != BattleStatus.Completed)
-            {
-                // AutoPlay (TABS): strategiya tugmalari yo'q — jang o'zi kechadi, pastda ArenaController tray chizadi.
-                if (!AutoPlay) act = DrawDecisionPanel(ui, b, new Rectangle(0, vh - panelH, vw, panelH), busy);
-            }
+                act = DrawDecisionPanel(ui, b, new Rectangle(0, vh - panelH, vw, panelH), busy);
             else
                 act = DrawResult(ui, b, vw, vh);
 

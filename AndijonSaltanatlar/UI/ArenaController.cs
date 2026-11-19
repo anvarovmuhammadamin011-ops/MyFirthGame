@@ -23,9 +23,31 @@ namespace AndijonSaltanatlar.UI
         private readonly AssetManager _assets;
         private readonly GameStateManager _state;
         private BattleScene _scene;
+        private TabsBattle _tabs;      // TABS uslubidagi real vaqt jang (mashq va hududga hujum)
         private float _lastTime = -1f;
-        private float _autoTimer;
         private int _seed;
+
+        private static Color ToColor(int[] c) => c != null && c.Length >= 3 ? new Color(c[0], c[1], c[2]) : Color.Gray;
+
+        private void SetupTabs(BattleDto b, float foeHpBonus)
+        {
+            _tabs ??= new TabsBattle(_assets, _state);
+            _tabs.Setup(b.AttackerGroups, b.DefenderGroups, ToColor(b.AttackerColor), ToColor(b.DefenderColor), b.AttackerName, b.DefenderName, foeHpBonus);
+        }
+
+        /// <summary>Sinov: joylashtirishsiz jangni boshlash (va ixtiyoriy — birinchi jangchi ichiga kirish).</summary>
+        public void TestBeginFight(bool possess)
+        {
+            _tabs?.BeginFight(possess);
+            if (Battle != null && Battle.Rounds.Count == 0) Battle.Rounds.Add(new BattleRoundDto { Round = 1, SummaryUz = "Jang boshlandi" });
+        }
+
+        /// <summary>Esc: jangchi ichida bo'lsa — chiqadi; aks holda sahna yopiladi.</summary>
+        public void Escape()
+        {
+            if (_tabs != null && _tabs.ReleasePossession()) return;
+            Close();
+        }
         private bool _rewarded;
         private int _defenseBonusPct;
 
@@ -97,9 +119,7 @@ namespace AndijonSaltanatlar.UI
             _rewarded = false;
             CampaignRegionId = -1;
             _defenseBonusPct = 0;
-            _scene ??= new BattleScene(_assets);
-            _scene.Reset();
-            _scene.AutoPlay = true; _autoTimer = 0f;
+            SetupTabs(Battle, 0f);
             _lastTime = -1f;
             return true;
         }
@@ -148,9 +168,7 @@ namespace AndijonSaltanatlar.UI
             };
             CampaignRegionId = regionId;
             _rewarded = false;
-            _scene ??= new BattleScene(_assets);
-            _scene.Reset();
-            _scene.AutoPlay = true; _autoTimer = 0f;
+            SetupTabs(Battle, _defenseBonusPct / 100f);
             _lastTime = -1f;
             return true;
         }
@@ -237,72 +255,35 @@ namespace AndijonSaltanatlar.UI
             _state.ShowMessage((win ? "G'alaba! " : b.Peace ? "Durang. " : "Mag'lubiyat. ") + (res?.TerritoryResult ?? ""), !win);
         }
 
-        /// <summary>Sahnani chizadi va tugmalarni qayta ishlaydi (UiKit — immediate-mode).</summary>
+        /// <summary>
+        /// TABS uslubidagi real vaqt jangni chizadi va yuritadi. Jang tugagach natija (omon qolgan kuch ulushi)
+        /// BattleDto'ga yoziladi va mavjud mukofot/hudud mantiqi (Reward → FinishCampaign) qo'llanadi.
+        /// </summary>
         public void Draw(UiKit ui, SpriteBatch sb, InputManager input, int vw, int vh, float time)
         {
             BattleDto b = Battle;
-            if (b == null) return;
+            if (b == null || _tabs == null) return;
             float dt = _lastTime < 0 ? 0f : Math.Clamp(time - _lastTime, 0f, 0.1f);
             _lastTime = time;
-
-            // TABS uslubi: jang o'zi kechadi — har ~2.2 s raund avtomatik hal bo'ladi (o'yinchi kuzatadi va qo'shin qo'shadi)
-            if (b.Status != BattleStatus.Completed)
-            {
-                _autoTimer += dt;
-                if (_autoTimer >= 2.2f)
-                {
-                    _autoTimer = 0f;
-                    BattleDecision auto = WarRules.AiDecision("balanced", _seed, b.Round, b.AttackerPower, b.AttackerStartPower, b.AttackerMorale, b.DefenderPower);
-                    Resolve(auto);
-                }
-            }
-
             ui.Begin(sb, input, vw, vh, time);
             ui.Fill(new Rectangle(0, 0, vw, vh), ui.T.Background);
-            BattleScene.Bind(sb);
-            BattleSceneAction act = _scene.Draw(ui, sb, b, vw, vh, dt, false);
-            // Pastdagi qo'shin tray'i (TABS): jangga qo'shin qo'shish tugmalari
-            if (Battle != null && Battle.Status != BattleStatus.Completed && _scene.TrayHeight > 0)
-                DrawReinforcementTray(ui, Battle, vw, vh, _scene.TrayHeight);
+            TabsBattle.Action act = _tabs.Draw(ui, sb, input, vw, vh, dt, b.ResultUz);
             ui.End();
-            if (act == BattleSceneAction.Decide) Resolve(_scene.SelectedDecision);
-            else if (act != BattleSceneAction.None) Close();
-        }
 
-        private static readonly (string Name, UnitLine Line, int Count, int Power, int Cost)[] TrayUnits =
-        {
-            ("Piyoda", UnitLine.Piyoda, 3, 10, 30),
-            ("Nayzachi", UnitLine.Piyoda, 3, 12, 40),
-            ("Kamonchi", UnitLine.Masofaviy, 3, 11, 50),
-            ("Otliq", UnitLine.Otliq, 2, 18, 80),
-            ("Katapulta", UnitLine.Aravasi, 1, 40, 150),
-        };
+            // Jang boshlandi — chekinish "mag'lubiyat" deb hisoblanishi uchun raund yozuvi
+            if (act == TabsBattle.Action.FightStarted && b.Rounds.Count == 0)
+                b.Rounds.Add(new BattleRoundDto { Round = 1, SummaryUz = "Jang boshlandi" });
 
-        private void DrawReinforcementTray(UiKit ui, BattleDto b, int vw, int vh, int trayH)
-        {
-            int n = TrayUnits.Length, pad = 8, gap = ui.Gap;
-            int bw = (vw - pad * 2 - gap * (n - 1)) / n;
-            int y = vh - trayH + 4, h = trayH - 8;
-            for (int i = 0; i < n; i++)
+            if (_tabs.Finished && b.Status != BattleStatus.Completed)
             {
-                var t = TrayUnits[i];
-                var r = new Rectangle(pad + i * (bw + gap), y, bw, h);
-                bool afford = _state.Coins >= t.Cost;
-                if (ui.Button(r, t.Name + "  " + t.Cost, afford ? ButtonKind.Secondary : ButtonKind.Ghost, afford, "Jangga " + t.Count + " ta " + t.Name + " qo'shish"))
-                    Reinforce(b, t.Line, t.Count, t.Power, t.Cost);
+                b.AttackerPower = (int)Math.Round(b.AttackerStartPower * _tabs.MineSurvival);
+                b.DefenderPower = (int)Math.Round(b.DefenderStartPower * _tabs.FoeSurvival);
+                b.Status = BattleStatus.Completed;
+                b.Peace = _tabs.Winner == 0;
+                b.WinnerKingdomId = _tabs.Winner == 1 ? MeId : _tabs.Winner == 2 ? FoeId : 0;
+                Reward(b);
             }
-        }
-
-        private void Reinforce(BattleDto b, UnitLine line, int count, int powerEach, int cost)
-        {
-            if (_state.Coins < cost) { _state.ShowMessage("Qo'shin qo'shish uchun tanga yetarli emas", true); return; }
-            _state.Coins -= cost;
-            UnitGroupDto g = b.AttackerGroups.FirstOrDefault(x => x.Line == line && x.Level == 1);
-            if (g == null) { g = new UnitGroupDto { Line = line, Level = 1, Count = 0 }; b.AttackerGroups.Add(g); }
-            g.Count += count;
-            int add = count * powerEach;
-            b.AttackerPower += add;
-            b.AttackerStartPower += add;
+            if (act == TabsBattle.Action.Close) Close();
         }
     }
 }
