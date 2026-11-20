@@ -154,6 +154,12 @@ namespace AndijonSaltanatlar.Units
         /// <summary>Hujum masofasi (tile). Nayzalilar uzunroq uradi.</summary>
         public float AttackRange { get; protected set; } = 0.95f;
 
+        /// <summary>Zirh (0..60): jangda kelgan zarbaning shuncha foizini yutadi (og'ir zirhli, qalqonchi, saroy qo'riqchisi).</summary>
+        public int Armor { get; set; }
+
+        /// <summary>Qo'shin katalogidagi turi (sahnaga qo'shindan chiqarilgan bo'lsa) — asir/yo'qotish hisobida ishlatiladi.</summary>
+        public AndijonSaltanatlar.Military.UnitType? LineType { get; set; }
+
         /// <summary>Kamonchi: uzoqdan o'q otadi (qamalda "Kamonchilar" qismi).</summary>
         public bool IsArcher { get; private set; }
 
@@ -416,6 +422,15 @@ namespace AndijonSaltanatlar.Units
 
         /// <summary>Joriy yo'nalishga mos kadrlar to'plami.</summary>
         private Texture2D[] Dir => FacingAway && BackFrames != null && BackFrames.Length == Frames.Length ? BackFrames : Frames;
+
+        /// <summary>
+        /// Ko'rinishni (sprayt oilasini) belgilaydi — UnitManager.Add dan OLDIN chaqiriladi. Yangi kasb va birlik turlari
+        /// (masalan "unit_heavy", "unit_citizen9") shu orqali o'z kiyimida chiziladi.
+        /// </summary>
+        public void SetLook(string spriteKey)
+        {
+            if (!string.IsNullOrEmpty(spriteKey)) SpriteKey = spriteKey;
+        }
 
         public void SetFrames(Texture2D[] frames)
         {

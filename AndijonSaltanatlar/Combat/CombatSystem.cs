@@ -1109,6 +1109,7 @@ namespace AndijonSaltanatlar.Combat
         private void Hit(Unit attacker, Unit victim, int dmg, bool heavy = false)
         {
             if (victim.IsDown) return;
+            dmg = AndijonSaltanatlar.Military.UnitLooks.Damage(attacker, victim, dmg);   // zirh va nayza-otliq ustunligi
             victim.HitPoints = Math.Max(0, victim.HitPoints - dmg);
             bool byPlayer = attacker == Possessed;
             victim.TakeHitVisual(IsoMath.TileToWorld(victim.Position) - IsoMath.TileToWorld(attacker.Position));

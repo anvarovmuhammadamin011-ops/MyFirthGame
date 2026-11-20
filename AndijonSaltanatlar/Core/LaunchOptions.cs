@@ -154,6 +154,9 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: K-uyga (ro'yxat tartibida) kirish — ichki ko'rinishni tekshirish uchun.</summary>
 	public int? EnterHouse;
 
+	/// <summary>Sinov: shahar markazida barcha kasb va askar ko'rinishlari qatori (--lineup).</summary>
+	public bool Lineup;
+
 	/// <summary>Sinov (serversiz): shu qasringizga AI hujumini darhol boshlash (--ai-attack Asaka).</summary>
 	public string AiAttack;
 	/// <summary>Sinov: AI yurishi necha soniyada yetib keladi (--ai-attack bilan).</summary>
@@ -354,6 +357,9 @@ public sealed class LaunchOptions
 			case "--map-pick":
 				launchOptions.MapPick = text;
 				i++;
+				break;
+			case "--lineup":
+				launchOptions.Lineup = true;
 				break;
 			case "--ai-attack":
 				launchOptions.AiAttack = text;

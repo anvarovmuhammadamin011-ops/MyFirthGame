@@ -345,9 +345,13 @@ public sealed class GameStateManager
 	/// <summary>Navbatdagi (tayyorlanayotgan) jangchilar soni chegarasi — bir bosishda ko'p xarid xatosidan himoya.</summary>
 	public const int MaxRecruitQueue = 60;
 
-	/// <summary>Jangchi turi uchun bino talabi bajarilganmi (buildings null bo'lsa — tekshirilmaydi).</summary>
-	public static bool UnitRequirementMet(UnitDef d, BuildingManager buildings)
+	/// <summary>
+	/// Jangchi turi ochiqmi: tarixiy davr (o'rganilgan texnologiyalar soni) va bino talabi. buildings null bo'lsa — bino
+	/// tekshirilmaydi; researched berilmasa — davr tekshirilmaydi.
+	/// </summary>
+	public static bool UnitRequirementMet(UnitDef d, BuildingManager buildings, int researched = int.MaxValue)
 	{
+		if (AndijonSaltanatlar.Progression.EraManager.EraIndex(researched) < d.MinEra) return false;
 		if (d.RequiredBuilding == null || buildings == null) return true;
 		foreach (Building b in buildings.Buildings)
 			if (b.Type == d.RequiredBuilding.Value && b.BuildProgress >= 1f && b.Level >= d.RequiredLevel) return true;
@@ -362,9 +366,10 @@ public sealed class GameStateManager
 	{
 		UnitDef unitDef = UnitCatalog.Get(type);
 		count = Math.Max(1, count);
-		if (!UnitRequirementMet(unitDef, buildings))
+		int researched = Civ.Player.Researched.Count;
+		if (!UnitRequirementMet(unitDef, buildings, researched))
 		{
-			ShowMessage(unitDef.NameUz + " uchun kerak: " + UnitCatalog.RequirementText(unitDef), isError: true);
+			ShowMessage(unitDef.NameUz + " uchun kerak: " + UnitCatalog.LockText(unitDef, researched), isError: true);
 			return false;
 		}
 		if (Military.QueueCount + count > MaxRecruitQueue)

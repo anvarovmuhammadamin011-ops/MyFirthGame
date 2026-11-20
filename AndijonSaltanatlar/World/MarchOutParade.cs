@@ -44,13 +44,7 @@ namespace AndijonSaltanatlar.World
         public bool CameraReleased { get; set; }
         private string _title = "", _detail = "";
 
-        public static string GroupOf(UnitType t) => t switch
-        {
-            UnitType.Otliq or UnitType.ElitaOtliq => "otliq",
-            UnitType.Kamonchi => "kamon",
-            UnitType.Nayzador or UnitType.SaroyQoriqchisi => "nayza",
-            _ => "piyoda"
-        };
+        public static string GroupOf(UnitType t) => UnitLooks.GroupOf(t);
 
         /// <summary>Paradni boshlaydi. Natija: boshlanish nuqtasi (kamera uchun) yoki null.</summary>
         public Vector2? Start(MapManager map, BuildingManager buildings, UnitManager units, ArmyManager mil, string targetName)
@@ -86,9 +80,11 @@ namespace AndijonSaltanatlar.World
                 int n = counts[g.Key];
                 if (n == 0) continue;
                 int show = Math.Max(1, (int)Math.Round(n * cap / (float)total));
+                // Qism ichidagi haqiqiy turlar (kuchlisi oldinda) — har biri o'z kiyimi va qurolida
+                var kinds = mil.Units.Where(m => GroupOf(m.UnitType) == g.Key).OrderByDescending(m => m.Strength).ToList();
                 for (int i = 0; i < show; i++)
                 {
-                    Unit u = Create(g.Key, pts[0]);
+                    Unit u = UnitLooks.Create(kinds[i % kinds.Count].UnitType, pts[0], Direction.South);
                     u.Team = UnitTeam.Player;
                     u.ExternallyControlled = true;
                     u.Hidden = true; // navbati kelguncha binoning ichida
@@ -106,18 +102,6 @@ namespace AndijonSaltanatlar.World
             CameraReleased = false;
             Active = _marchers.Count > 0;
             return Active ? pts[0] : (Vector2?)null;
-        }
-
-        private static Unit Create(string group, Vector2 pos)
-        {
-            Vector2[] here = { pos };
-            switch (group)
-            {
-                case "otliq": return new CavalryUnit(here);
-                case "nayza": return new SpearmanUnit(pos, Direction.South);
-                case "kamon": { var a = new PatrolUnit(here); a.MakeArcher(); return a; }
-                default: return new SwordsmanUnit(here);
-            }
         }
 
         public void Update(float dt)

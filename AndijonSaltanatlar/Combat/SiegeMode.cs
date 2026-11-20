@@ -39,13 +39,7 @@ namespace AndijonSaltanatlar.Combat
         private readonly List<(Rectangle Rect, string Key)> _groupButtons = new List<(Rectangle, string)>();
         private Vector2 _formationCenter;
 
-        private static string GroupOf(UnitType t) => t switch
-        {
-            UnitType.Otliq or UnitType.ElitaOtliq => "otliq",
-            UnitType.Kamonchi => "kamon",
-            UnitType.Nayzador or UnitType.SaroyQoriqchisi => "nayza",
-            _ => "piyoda"
-        };
+        private static string GroupOf(UnitType t) => UnitLooks.GroupOf(t);
 
         /// <summary>Qamal nishoni (mahalliy saltanat xaritasidan yoki onlayn dunyo xaritasidan).</summary>
         private sealed class Target
@@ -239,8 +233,7 @@ namespace AndijonSaltanatlar.Combat
                 {
                     var want = new Vector2(O + 31.1f + (i % Cols) * Step, y + (i / Cols) * Step);
                     Vector2 pos = NearestFree(want, used);
-                    Unit u = Create(g.Units[i].UnitType, pos);
-                    if (g.Key == "kamon") u.MakeArcher();
+                    Unit u = UnitLooks.Create(g.Units[i].UnitType, pos);   // o'z kiyimi, zirhi va (kamonchi bo'lsa) masofasi bilan
                     u.Team = UnitTeam.Player;
                     u.ExternallyControlled = true; // buyruq kutib saf turadi
                     u.SetFacing(new Vector2(0, -1));
@@ -297,31 +290,8 @@ namespace AndijonSaltanatlar.Combat
             return p;
         }
 
-        /// <summary>Qo'shin turidan sahnadagi jangchi.</summary>
-        private static Unit Create(UnitType type, Vector2 pos)
-        {
-            Vector2[] here = { pos };
-            switch (type)
-            {
-                case UnitType.Otliq:
-                case UnitType.ElitaOtliq: return new CavalryUnit(here);
-                case UnitType.Nayzador:
-                case UnitType.SaroyQoriqchisi: return new SpearmanUnit(pos, Direction.North);
-                case UnitType.Qalqonchi: return new GuardUnit(pos, Direction.North);
-                case UnitType.Qilichboz: return new SwordsmanUnit(here);
-                default: return new PatrolUnit(here);
-            }
-        }
-
-        private static UnitType TypeOf(Unit u) => u switch
-        {
-            CavalryUnit _ => UnitType.Otliq,
-            Unit a when a.IsArcher => UnitType.Kamonchi,
-            SpearmanUnit _ => UnitType.Nayzador,
-            GuardUnit _ => UnitType.Qalqonchi,
-            SwordsmanUnit _ => UnitType.Qilichboz,
-            _ => UnitType.Piyoda
-        };
+        /// <summary>Asir tushgan dushman askarining qo'shindagi turi (bitta jadvaldan — UnitLooks).</summary>
+        private static UnitType TypeOf(Unit u) => UnitLooks.TypeOf(u);
 
         // ==================================================================
         // YANGILASH

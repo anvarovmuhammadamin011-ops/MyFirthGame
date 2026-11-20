@@ -69,6 +69,7 @@ namespace AndijonSaltanatlar.Units
         /// </summary>
         public void LoadFrames(string key, out Texture2D[] frames, out Texture2D[] back)
         {
+            _assets.EnsureFamily(key);   // yangi kasb/askar: 3D-render kadrlaridan birinchi marta yasaladi
             if (_assets.TryGet(key + "_w0") != null && _assets.TryGet(key + "_w" + (WalkFrames - 1)) != null)
             {
                 frames = new Texture2D[1 + WalkFrames];

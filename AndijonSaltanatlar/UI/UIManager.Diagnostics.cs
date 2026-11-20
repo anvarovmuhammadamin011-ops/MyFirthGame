@@ -23,16 +23,24 @@ namespace AndijonSaltanatlar.UI
 
         private DiagTab _diagTab = DiagTab.City;
         private bool _buyOpen;
-        private readonly int[] _buyQty = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+        private readonly int[] _buyQty = NewQty(UnitCatalog.All.Count);
         private long _lastBuyTick;
+
+        /// <summary>Har jangchi turi uchun xarid soni (boshida 1) — katalog o'lchamiga moslashadi.</summary>
+        private static int[] NewQty(int n)
+        {
+            var a = new int[n];
+            for (int i = 0; i < n; i++) a[i] = 1;
+            return a;
+        }
 
         private Rectangle _diagClose, _diagContent, _armyBuyBtn, _armyTrainBtn, _armyArenaBtn, _buyBackBtn, _speedRow, _pagePrev, _pageNext;
         private int _catPage, _catPages = 1;
         private readonly Rectangle[] _diagTabRects = new Rectangle[4];
-        private readonly Rectangle[] _cardRects = new Rectangle[10];
-        private readonly Rectangle[] _cardMinus = new Rectangle[10];
-        private readonly Rectangle[] _cardPlus = new Rectangle[10];
-        private readonly Rectangle[] _cardBuy = new Rectangle[10];
+        private readonly Rectangle[] _cardRects = new Rectangle[UnitCatalog.All.Count];
+        private readonly Rectangle[] _cardMinus = new Rectangle[UnitCatalog.All.Count];
+        private readonly Rectangle[] _cardPlus = new Rectangle[UnitCatalog.All.Count];
+        private readonly Rectangle[] _cardBuy = new Rectangle[UnitCatalog.All.Count];
 
         /// <summary>JANG MAYDONI tugmasi bosildi (Game1 mashq jangini ochadi).</summary>
         public bool OpenArenaRequested { get; set; }
@@ -76,7 +84,7 @@ namespace AndijonSaltanatlar.UI
                     _buyBackBtn = new Rectangle(c.Right - 150, c.Y, 150, bh);
                     int top = c.Y + bh + 10, g = 8;
                     int cols = Math.Clamp(c.Width / 220, 2, 5);
-                    int count = Math.Min(10, UnitCatalog.All.Count);
+                    int count = UnitCatalog.All.Count;
                     // Karta matni sig'ishi uchun kerakli balandlik; ekran past bo'lsa (telefon) — sahifalarga bo'linadi
                     int need = Touch ? 234 : 226;
                     int rowsAll = (count + cols - 1) / cols;
@@ -93,7 +101,7 @@ namespace AndijonSaltanatlar.UI
                     int cw = (c.Width - g * (cols - 1)) / cols;
                     int ch = (c.Bottom - top - g * (rows - 1)) / rows;
                     int sb = Touch ? 28 : 24;
-                    for (int i = 0; i < UnitCatalog.All.Count && i < 10; i++)
+                    for (int i = 0; i < UnitCatalog.All.Count; i++)
                     {
                         int k = i - _catPage * perPage;
                         if (k < 0 || k >= perPage)
@@ -144,7 +152,7 @@ namespace AndijonSaltanatlar.UI
                     if (_buyBackBtn.Contains(m)) { _buyOpen = false; return true; }
                     if (_pagePrev.Contains(m)) { _catPage = Math.Max(0, _catPage - 1); return true; }
                     if (_pageNext.Contains(m)) { _catPage = Math.Min(_catPages - 1, _catPage + 1); return true; }
-                    for (int i = 0; i < UnitCatalog.All.Count && i < 10; i++)
+                    for (int i = 0; i < UnitCatalog.All.Count; i++)
                     {
                         if (_cardMinus[i].Contains(m)) { _buyQty[i] = Math.Max(1, _buyQty[i] - 1); return true; }
                         if (_cardPlus[i].Contains(m)) { _buyQty[i] = Math.Min(10, _buyQty[i] + 1); return true; }
@@ -330,7 +338,7 @@ namespace AndijonSaltanatlar.UI
             ArmyManager mil = _state.Military;
 
             Panel(sb, _armyBuyBtn, new Color(70, 54, 24, 245), Gold, 2);
-            DrawButtonText(sb, "SOTIB OLISH (10 TUR)", _armyBuyBtn, Gold);
+            DrawButtonText(sb, "SOTIB OLISH (" + UnitCatalog.All.Count + " TUR)", _armyBuyBtn, Gold);
             bool training = _state.TrainingActive;
             Panel(sb, _armyTrainBtn, PanelBg2, training ? Green : Border, 1);
             DrawButtonText(sb, training ? "MASHG'ULOT: " + (int)(_state.TrainingProgress * 100) + "%" : "MASHG'ULOT MAYDONI", _armyTrainBtn, training ? Green : Cream);
@@ -394,12 +402,13 @@ namespace AndijonSaltanatlar.UI
             }
             ArmyManager mil = _state.Military;
 
-            for (int i = 0; i < UnitCatalog.All.Count && i < 10; i++)
+            for (int i = 0; i < UnitCatalog.All.Count; i++)
             {
                 UnitDef d = UnitCatalog.All[i];
                 Rectangle r = _cardRects[i];
                 if (r == Rectangle.Empty) continue;
-                bool unlocked = GameStateManager.UnitRequirementMet(d, _buildings);
+                int researched = _state.Civ.Player.Researched.Count;
+                bool unlocked = GameStateManager.UnitRequirementMet(d, _buildings, researched);
                 int total = d.TrainingCost * _buyQty[i];
                 bool afford = _state.Coins >= total;
                 Panel(sb, r, unlocked ? PanelBg2 : new Color(26, 24, 30, 245), unlocked ? Border : new Color(80, 70, 70), 1);
@@ -408,6 +417,7 @@ namespace AndijonSaltanatlar.UI
                 // Belgi (jangchi spraytining birinchi kadri)
                 var icon = new Rectangle(r.X + 6, r.Y + 6, 44, 44);
                 Fill(sb, icon, new Color(18, 15, 12));
+                _assets.EnsureFamily(d.IconKey);   // yangi birlik ko'rinishi birinchi ochilganda yasaladi
                 Texture2D tex = _assets.TryGet(d.IconKey + "_0");
                 if (tex != null) DrawFit(sb, tex, new Rectangle(icon.X + 2, icon.Y + 2, icon.Width - 4, icon.Height - 4));
                 _font.Draw(sb, UnitCatalog.RoleName(d.Role), new Vector2(icon.Right + 8, r.Y + 10), Muted, 2, 1);
@@ -420,11 +430,11 @@ namespace AndijonSaltanatlar.UI
                 y += 2;
                 Color tc = unlocked ? Cream : Muted;
                 _font.Draw(sb, "Kuch: " + d.Power + " (" + d.Attack + "/" + d.Defense + ")", new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
-                _font.Draw(sb, "HP " + d.Health + "  Tezlik " + d.Speed, new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
+                _font.Draw(sb, "HP " + d.Health + "  Tez " + d.Speed + (d.Armor > 0 ? "  Zirh " + d.Armor + "%" : ""), new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
                 _font.Draw(sb, "Narx: " + d.TrainingCost + (_buyQty[i] > 1 ? " x" + _buyQty[i] + " = " + total : ""), new Vector2(r.X + 7, y), unlocked ? (afford ? Gold : Red) : Muted, 2, 1); y += 19;
                 _font.Draw(sb, "Maosh: " + d.Upkeep + " / kun", new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
                 if (!unlocked)
-                    _font.Draw(sb, "QULF: " + UnitCatalog.RequirementText(d), new Vector2(r.X + 7, y), Red, 2, 1);
+                    _font.Draw(sb, "QULF: " + UnitCatalog.LockText(d, researched), new Vector2(r.X + 7, y), Red, 2, 1);
                 else
                     _font.Draw(sb, d.TrainingDays + " soatda tayyor", new Vector2(r.X + 7, y), Green, 2, 1);
 

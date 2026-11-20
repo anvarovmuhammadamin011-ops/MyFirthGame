@@ -56,7 +56,8 @@ namespace AndijonSaltanatlar.Core
         public const string UnitElite = "unit_elite";
         public const string UnitCavalry = "unit_cavalry";          // otliq (Bobur bobo modellaridan)              // xos navkar (VIP)
         public const string UnitCitizen = "unit_citizen"; // + <0..5> + _0.._2 (fuqaro turi + kadr)
-        public const int CitizenKinds = CitizenArt.Kinds;
+        /// <summary>PNG (3D render) bilan yuklanadigan fuqaro turlari; qolganlari SpriteVariants orqali talab bo'yicha yasaladi.</summary>
+        public const int CitizenKinds = CitizenArt.RenderedKinds;
         public const int UnitFrames = 3;
 
         public const string IconCoin = "icon_coin";
@@ -356,46 +357,91 @@ namespace AndijonSaltanatlar.Core
 
         private void Register(string key, Func<Canvas> placeholder)
         {
-            string path = Path.Combine(_spriteDir, key + ".png");
-            Canvas canvas = null;
-            if (File.Exists(path))
-            {
-                try { canvas = Canvas.FromPng(_gd, path); }
-                catch (Exception) { canvas = null; } // buzuq fayl — placeholderga qaytamiz
-            }
-            else if (Bundled.Contains(key))
-            {
-                // Telefon: PNG APK ichida (TitleContainer); o'qib bo'lmasa — chizilgan rasm
-                try
-                {
-                    using var s = Microsoft.Xna.Framework.TitleContainer.OpenStream("Content/Sprites/" + key + ".png");
-#if ANDROID
-                    // Android: PNG tizimning o'z dekoderi bilan o'qiladi (Texture2D.GetData'ga tayanmaydi)
-                    using var bmp = Android.Graphics.BitmapFactory.DecodeStream(s);
-                    int bw = bmp.Width, bh = bmp.Height;
-                    var argb = new int[bw * bh];
-                    bmp.GetPixels(argb, 0, bw, 0, 0, bw, bh);
-                    var c = new Canvas(bw, bh);
-                    for (int i = 0; i < argb.Length; i++)
-                    {
-                        int v = argb[i];
-                        c.Pixels[i] = new Color((v >> 16) & 255, (v >> 8) & 255, v & 255, (v >> 24) & 255);
-                    }
-#else
-                    using var btex = Texture2D.FromStream(_gd, s);
-                    var c = new Canvas(btex.Width, btex.Height);
-                    btex.GetData(c.Pixels);
-#endif
-                    canvas = c;
-                }
-                catch (Exception) { canvas = null; }
-            }
+            Canvas canvas = LoadCanvas(key);
             if (canvas == null)
             {
                 canvas = placeholder();
                 if (_exportDir != null) canvas.SavePng(_gd, Path.Combine(_exportDir, key + ".png"));
             }
+            AddTexture(key, canvas);
+        }
 
+        /// <summary>Content/Sprites dagi PNG fayli bormi (kompyuterda fayl, telefonda sprites.txt ro'yxati).</summary>
+        private bool HasPng(string key) => File.Exists(Path.Combine(_spriteDir, key + ".png")) || Bundled.Contains(key);
+
+        /// <summary>PNG'ni piksellar (Canvas) ko'rinishida o'qiydi; topilmasa yoki buzuq bo'lsa null.</summary>
+        private Canvas LoadCanvas(string key)
+        {
+            string path = Path.Combine(_spriteDir, key + ".png");
+            if (File.Exists(path))
+            {
+                try { return Canvas.FromPng(_gd, path); }
+                catch (Exception) { return null; } // buzuq fayl — placeholderga qaytamiz
+            }
+            if (!Bundled.Contains(key)) return null;
+            // Telefon: PNG APK ichida (TitleContainer)
+            try
+            {
+                using var s = Microsoft.Xna.Framework.TitleContainer.OpenStream("Content/Sprites/" + key + ".png");
+#if ANDROID
+                // Android: PNG tizimning o'z dekoderi bilan o'qiladi (Texture2D.GetData'ga tayanmaydi)
+                using var bmp = Android.Graphics.BitmapFactory.DecodeStream(s);
+                int bw = bmp.Width, bh = bmp.Height;
+                var argb = new int[bw * bh];
+                bmp.GetPixels(argb, 0, bw, 0, 0, bw, bh);
+                var c = new Canvas(bw, bh);
+                for (int i = 0; i < argb.Length; i++)
+                {
+                    int v = argb[i];
+                    c.Pixels[i] = new Color((v >> 16) & 255, (v >> 8) & 255, v & 255, (v >> 24) & 255);
+                }
+#else
+                using var btex = Texture2D.FromStream(_gd, s);
+                var c = new Canvas(btex.Width, btex.Height);
+                btex.GetData(c.Pixels);
+#endif
+                return c;
+            }
+            catch (Exception) { return null; }
+        }
+
+        /// <summary>Oila kadrlari qo'shimchalari: turish, orqa, yurish, orqa yurish, zarba, ish.</summary>
+        private static IEnumerable<string> FamilySuffixes()
+        {
+            for (int f = 0; f < SpriteKeys.UnitFrames; f++) { yield return "_" + f; yield return "_b" + f; }
+            for (int i = 0; i < 8; i++) { yield return "_w" + i; yield return "_bw" + i; }
+            for (int a = 0; a < UnitArt.AttackKinds; a++)
+                for (int p = 0; p < UnitArt.AttackPhases; p++) yield return "_a" + a + "_" + p;
+            for (int i = 0; i < 4; i++) { yield return "_h" + i; yield return "_bh" + i; }
+        }
+
+        /// <summary>
+        /// Personaj oilasi tayyorligini ta'minlaydi: PNG bilan ro'yxatdan o'tgan bo'lsa — darhol true; SpriteVariants'da
+        /// bo'lsa — manba 3D-render kadrlaridan kiyimi qayta bo'yalib, birinchi so'rovda yasaladi (keyin kesh). Aks holda false.
+        /// </summary>
+        public bool EnsureFamily(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            if (_textures.ContainsKey(key + "_0")) return true;
+            VariantDef v = SpriteVariants.Find(key);
+            if (v == null || !_textures.ContainsKey(v.BaseKey + "_0")) return false;
+            foreach (string suf in FamilySuffixes())
+            {
+                if (!HasPng(v.BaseKey + suf)) continue;
+                Canvas src = LoadCanvas(v.BaseKey + suf);
+                if (src == null) continue;
+                Canvas diff = v.DiffKey != null ? LoadCanvas(v.DiffKey + suf) : null;
+                if (v.DiffKey != null && (diff == null || diff.Width != src.Width || diff.Height != src.Height)) continue;
+                var dst = new Canvas(src.Width, src.Height);
+                SpriteVariants.Apply(src.Pixels, diff?.Pixels, dst.Pixels, v.BaseShift, v.Recipe);
+                AddTexture(key + suf, dst);
+            }
+            return _textures.ContainsKey(key + "_0");
+        }
+
+        /// <summary>Kanvasni teksturaga aylantirib ro'yxatga qo'shadi (alfa niqobi bilan — aniq tanlash va chaqnash uchun).</summary>
+        private void AddTexture(string key, Canvas canvas)
+        {
             // 3D modeldan olingan yuqori aniqlikdagi odam rasmi (HR marta katta) — mipmapli, chizishda 1/HR masshtab
             bool hiRes = (key.StartsWith("unit_") && canvas.Height >= 120) || key.StartsWith("crop_") || key.StartsWith("carry_");
             Texture2D tex = hiRes ? canvas.ToTextureMipmapped(_gd) : canvas.ToTexture(_gd);

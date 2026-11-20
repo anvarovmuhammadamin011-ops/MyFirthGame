@@ -1826,6 +1826,11 @@ public sealed class Game1 : Game
 		{
 			_onlinePanel.ToggleWorldMap();   // M — xaritani yopish
 		}
+		if (_opt.Lineup && !_lineupDone && !_loginMode && !_menuMode && !_introMode && _units != null)
+		{
+			_lineupDone = true;
+			SpawnLineup();
+		}
 		if (_opt.MarchOut != null && !_paradeTestDone && !_loginMode && !_menuMode && !_introMode && _state.Military != null)
 		{
 			_paradeTestDone = true;
@@ -2275,6 +2280,40 @@ public sealed class Game1 : Game
 	}
 
 	/// <summary>Fasl almashganda xabar (o'yin boshida emas — faqat almashuvda).</summary>
+	// ------------------------------------------------------------------ SINOV: barcha kasb va askarlar qatori (--lineup)
+	private bool _lineupDone;
+
+	/// <summary>Shahar markazida barcha fuqaro turlari (2 qator) va askar ko'rinishlari (1 qator) — ko'rinishni tekshirish uchun.</summary>
+	private void SpawnLineup()
+	{
+		var c = new Vector2(GameConfig.CityCenter, GameConfig.CityCenter + 6);
+		for (int k = 0; k < AndijonSaltanatlar.Core.Graphics.CitizenArt.Kinds; k++)
+		{
+			var p = c + new Vector2(-4.5f + (k % 9) * 1.1f, (k / 9) * 1.4f - 0.7f);
+			_units.Add(new CitizenUnit(new[] { p }, k) { Hold = true });
+		}
+		string[] soldiers =
+		{
+			SpriteKeys.UnitSwordsman, SpriteKeys.UnitSpearman, SpriteKeys.UnitShield, SpriteKeys.UnitPatrol, "unit_archer", "unit_herald",
+			"unit_marksman", "unit_musketeer", "unit_heavy", "unit_watchman", "unit_engineer", SpriteKeys.UnitElite
+		};
+		for (int i = 0; i < soldiers.Length; i++)
+		{
+			var u = new PatrolUnit(new[] { c + new Vector2(-6f + i * 1.1f, 2.4f) }, 1f) { Hold = true };
+			u.SetLook(soldiers[i]);
+			_units.Add(u);
+		}
+		string[] riders = { SpriteKeys.UnitCavalry, "unit_cavalry_elite", "unit_scout" };
+		for (int i = 0; i < riders.Length; i++)
+		{
+			var r = new CavalryUnit(new[] { c + new Vector2(-2f + i * 2f, 4.2f) }) { Hold = true };
+			r.SetLook(riders[i]);
+			_units.Add(r);
+		}
+		Vector2 look = _opt.CenterTile ?? c + new Vector2(0, 1.5f);
+		_camera.Jump(IsoMath.TileToWorld(look), _opt.Zoom ?? 2.2f);
+	}
+
 	// ------------------------------------------------------------------ AI DAVLATLAR HUJUMI (serversiz dunyo)
 
 	/// <summary>Serversiz dunyo faol: serversiz o'ynash (M — mahalliy O'zbekiston xaritasi), bulut/onlayn emas.</summary>

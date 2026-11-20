@@ -21,12 +21,14 @@ namespace AndijonSaltanatlar.Tests
         [Fact]
         public void UnitCatalog_HasTenDistinctTypes_OldSaveIdsUnchanged()
         {
-            Assert.Equal(10, UnitCatalog.All.Count);
-            Assert.Equal(10, UnitCatalog.All.Select(d => d.Type).Distinct().Count());
-            Assert.Equal(10, UnitCatalog.All.Select(d => d.NameUz).Distinct().Count());
-            // Eski saqlashlardagi butun son qiymatlari o'zgarmagan
+            Assert.True(UnitCatalog.All.Count >= 10);
+            Assert.Equal(UnitCatalog.All.Count, UnitCatalog.All.Select(d => d.Type).Distinct().Count());
+            Assert.Equal(UnitCatalog.All.Count, UnitCatalog.All.Select(d => d.NameUz).Distinct().Count());
+            // Eski saqlashlardagi butun son qiymatlari o'zgarmagan (yangilari faqat oxiriga qo'shilgan)
             Assert.Equal(0, (int)UnitType.Piyoda);
             Assert.Equal(5, (int)UnitType.Otliq);
+            Assert.Equal(9, (int)UnitType.TaminotBirligi);
+            Assert.Equal(10, (int)UnitType.OgirZirhli);
             string[] want = { "Piyoda", "Qilichboz", "Nayzachi", "Kamonchi", "Otliq", "Qalqonchi", "Saroy qo'riqchisi", "Elita otliq", "Harbiy xabarchi", "Ta'minot birligi" };
             foreach (string n in want) Assert.Contains(UnitCatalog.All, d => d.NameUz == n);
             Assert.All(UnitCatalog.All, d => Assert.True(d.TrainingCost > 0 && d.Upkeep > 0 && d.Health > 0));

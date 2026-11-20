@@ -14,7 +14,10 @@ namespace AndijonSaltanatlar.Tests
         [InlineData(CitizenArt.Farmer, "DEHQON")]
         [InlineData(CitizenArt.Buyer, "XARIDOR")]
         [InlineData(CitizenArt.Shepherd, "CHOPON")]
-        [InlineData(6, "ODDIY ODAM")]
+        [InlineData(CitizenArt.Miner, "KONCHI")]
+        [InlineData(CitizenArt.Scholar, "OLIM")]
+        [InlineData(CitizenArt.Caravaneer, "KARVONCHI")]
+        [InlineData(CitizenArt.Kinds, "ODDIY ODAM")]
         public void CitizenRoleLabelMatchesCitizenKind(int kind, string expectedLabel)
         {
             var citizen = new CitizenUnit(new[] { Vector2.Zero, Vector2.One }, kind);

@@ -16,7 +16,12 @@ namespace AndijonSaltanatlar.Units
     /// </summary>
     public sealed class CitizenUnit : PatrolUnit
     {
-        private static readonly string[] Names = { "Fuqaro", "Savdogar", "Hunarmand", "Dehqon", "Xaridor", "Chopon" };
+        private static readonly string[] Names =
+        {
+            "Fuqaro", "Savdogar", "Hunarmand", "Dehqon", "Xaridor", "Chopon",
+            "Konchi", "Baliqchi", "Omborchi", "Soliqchi", "Bozor egasi", "Olim",
+            "Tabib", "Me'mor", "Quruvchi", "Ustoz", "Amaldor", "Karvonchi"
+        };
         private static readonly string[] Descs =
         {
             "Shahar aholisi. Kundalik yumushlari bilan band.",
@@ -24,9 +29,26 @@ namespace AndijonSaltanatlar.Units
             "Kulol-hunarmand. Ustaxonasiga qaytmoqda.",
             "Dehqon. Dalalardan shaharga kelmoqda.",
             "Bozor xaridori. Narx-navo bilan qiziqadi.",
-            "Chopon. Shahar chetidagi yaylovni aylanib yuradi."
+            "Chopon. Shahar chetidagi yaylovni aylanib yuradi.",
+            "Konchi. Tog' konidan tosh va ma'dan qazib oladi.",
+            "Baliqchi. Ariq va daryodan baliq tutadi.",
+            "Omborchi. Don, mato va qurol zaxirasini hisoblaydi.",
+            "Soliq yig'uvchi. Xazinaga tushumni daftarga yozadi.",
+            "Bozor egasi. Rastalar va do'konlar tartibini boshqaradi.",
+            "Olim. Madrasada falakiyot va riyoziyot bilan shug'ullanadi.",
+            "Tabib. Bemorlarni dorivor o'tlar bilan davolaydi.",
+            "Me'mor. Yangi bino va gumbazlarni loyihalaydi.",
+            "Quruvchi. G'isht teradi, devor va uylar quradi.",
+            "Ustoz. Madrasada shogirdlarga ta'lim beradi.",
+            "Amaldor. Saroy devonida davlat ishlarini yuritadi.",
+            "Karvonchi. Karvonsaroydan yuk va tuyalarni boshqaradi."
         };
-        private static readonly string[] RoleLabels = { "ODDIY ODAM", "SAVDOGAR", "HUNARMAND", "DEHQON", "XARIDOR", "CHOPON" };
+        private static readonly string[] RoleLabels =
+        {
+            "ODDIY ODAM", "SAVDOGAR", "HUNARMAND", "DEHQON", "XARIDOR", "CHOPON",
+            "KONCHI", "BALIQCHI", "OMBORCHI", "SOLIQCHI", "BOZOR EGASI", "OLIM",
+            "TABIB", "ME'MOR", "QURUVCHI", "USTOZ", "AMALDOR", "KARVONCHI"
+        };
 
         public int Kind { get; }
         public string RoleLabel => RoleLabels[Kind];
