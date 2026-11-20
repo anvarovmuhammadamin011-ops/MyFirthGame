@@ -55,6 +55,8 @@ namespace AndijonSaltanatlar.Server.Controllers
         [HttpPost("recruit")] public Task<IActionResult> Recruit([FromBody] RecruitRequest r) => Act(k => _war.RecruitAsync(k, r));
         [HttpPost("upgrade")] public Task<IActionResult> Upgrade([FromBody] UpgradeUnitsRequest r) => Act(k => _war.UpgradeAsync(k, r));
         [HttpPost("facility")] public Task<IActionResult> Facility([FromBody] FacilityRequest r) => Act(k => _war.BuildFacilityAsync(k, r));
+        /// <summary>Egallangan qasrni kuchaytirish (devor, darvoza, minoralar) — himoya darajasi +1.</summary>
+        [HttpPost("fortify")] public Task<IActionResult> Fortify([FromBody] FortifyRequest r) => Act(k => _war.FortifyRegionAsync(k, r));
         [HttpPost("commander/hire")] public Task<IActionResult> Hire([FromBody] CommanderRequest r) => Act(k => _war.HireCommanderAsync(k, r));
         [HttpPost("commander/assign")] public Task<IActionResult> Assign([FromBody] CommanderRequest r) => Act(k => _war.AssignCommanderAsync(k, r));
         [HttpPost("army/create")] public Task<IActionResult> CreateArmy([FromBody] CreateArmyRequest r) => Act(k => _war.CreateArmyAsync(k, r));

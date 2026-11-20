@@ -172,6 +172,8 @@ namespace AndijonSaltanatlar.Server.Data
         public int Population { get; set; }
         /// <summary>PROMPT 19B: barqarorlik (0..100).</summary>
         public int Stability { get; set; } = 60;
+        /// <summary>Qasr himoya darajasi (0..WarRules.MaxFortify): egasi shaharga kirib kuchaytiradi. Egasi almashsa 0.</summary>
+        public int Fortify { get; set; }
     }
 
     /// <summary>

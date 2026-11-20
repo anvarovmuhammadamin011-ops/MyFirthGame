@@ -83,6 +83,23 @@ namespace AndijonSaltanatlar.Shared.War
         public const int NewPlayerProtectionHours = 24;
         public const int TruceHours = 12;
         public const int MinBattleArmy = 5;           // jangga kirish uchun kamida 5 jangovar birlik
+
+        // --- Qasrni kuchaytirish (egallangan hudud: devor, darvoza, minoralar) — serversiz va onlayn bir xil ---
+        /// <summary>Qasr himoyasining eng yuqori darajasi.</summary>
+        public const int MaxFortify = 5;
+        /// <summary>Joriy darajadan keyingisiga o'tish narxi (tanga): 150, 270, 390, 510, 630.</summary>
+        public static int FortifyCost(int currentLevel) => 150 + 120 * Math.Clamp(currentLevel, 0, MaxFortify - 1);
+        /// <summary>Jangda himoyachiga qo'shimcha kuch (%): har daraja +12%.</summary>
+        public static int FortifyDefensePct(int level) => 12 * Math.Clamp(level, 0, MaxFortify);
+
+        // --- AI davlatlar hujumi (onlayn: faqat o'yindagi, himoyasiz o'yinchilarga) ---
+        /// <summary>O'yinchi birinchi marta kuzatilgandan keyin birinchi AI hujumigacha (soniya).</summary>
+        public const int AiAttackFirstDelaySeconds = 480;
+        /// <summary>Keyingi hujumgacha: egallangan qasr bo'lsa 6–9 daqiqa, bo'lmasa 10–14 daqiqa.</summary>
+        public static int AiAttackGapSeconds(bool hasConquests, int roll0to99) =>
+            hasConquests ? 360 + roll0to99 * 180 / 100 : 600 + roll0to99 * 240 / 100;
+        /// <summary>AI yurishi kamida shuncha soniya davom etadi — o'yinchi ogohlantirishni ko'rib, kuchaytirishga ulgursin.</summary>
+        public const int AiMarchMinSeconds = 90;
         public const int MarchCost = 80;              // yurish ta'minoti (tanga)
         public const int PlunderPercent = 20;         // poytaxt qamalidagi o'lja: xazinaning 20%
         public const int PlunderMax = 2000;

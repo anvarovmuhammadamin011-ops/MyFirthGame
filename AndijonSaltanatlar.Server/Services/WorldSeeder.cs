@@ -63,6 +63,7 @@ namespace AndijonSaltanatlar.Server.Services
                     byKey[key] = k;
                 }
                 r.OwnerKingdomId = k.Id;
+                r.Fortify = 0;
                 given++;
             }
             await db.SaveChangesAsync();
@@ -236,7 +237,7 @@ namespace AndijonSaltanatlar.Server.Services
             // Shartli yangilash: boshqa so'rov shu hududni oldinroq olgan bo'lsa — 0 qator.
             int expected = r.OwnerKingdomId; // egasiz (0) yoki joy beradigan AI davlat
             int changed = await db.Regions.Where(x => x.Id == r.Id && x.OwnerKingdomId == expected)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, k.Id).SetProperty(x => x.Stability, 70));
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, k.Id).SetProperty(x => x.Stability, 70).SetProperty(x => x.Fortify, 0));
             if (changed == 0) throw new InvalidOperationException("Hudud band.");
             db.Entry(r).State = EntityState.Detached;
             var cities = await db.Cities.Where(c => c.RegionId == r.Id).OrderByDescending(c => c.Population).ToListAsync();

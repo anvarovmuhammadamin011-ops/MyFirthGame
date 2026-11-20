@@ -16,6 +16,8 @@ namespace AndijonSaltanatlar.Server.Data
         /// <summary>Saqlash xarajati oxirgi marta yechilgan o'yin kuni.</summary>
         public long LastUpkeepDay { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>Keyingi AI hujumi vaqti (faqat o'yinchilar uchun). Bo'sh (0001) — hali rejalashtirilmagan.</summary>
+        public DateTime NextAiAttackAt { get; set; }
     }
 
     public class ArmyEntity

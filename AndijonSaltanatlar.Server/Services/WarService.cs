@@ -642,6 +642,8 @@ namespace AndijonSaltanatlar.Server.Services
             var a = await SideStatsAsync(aArmy);
             var d = await SideStatsAsync(dArmy);
             int defLevel = await FacilityLevelAsync(defender.Id, FacilityKind.Mudofaa);
+            // Qasr himoya darajasi (egasi shaharga kirib kuchaytirgan devor/darvoza/minoralar): har daraja +12%
+            int fort = await Db.Regions.Where(x => x.Id == regionId && x.OwnerKingdomId == defender.Id).Select(x => x.Fortify).FirstOrDefaultAsync();
             var b = new BattleEntity
             {
                 WorldId = worldId, IsPvp = isPvp, Status = (int)BattleStatus.InProgress, Round = 1,
@@ -650,7 +652,7 @@ namespace AndijonSaltanatlar.Server.Services
                 AttackerKingdomId = attacker.Id, DefenderKingdomId = defender.Id, AttackerArmyId = aArmy.Id, DefenderArmyId = dArmy.Id,
                 AttackerStartPower = a.start, DefenderStartPower = d.start, AttackerPower = a.start, DefenderPower = d.start,
                 AttackerMorale = a.morale, DefenderMorale = d.morale, AttackerResiliencePct = a.resPct, DefenderResiliencePct = d.resPct,
-                DefenseBonusPct = defLevel * 8 + (defender.IsAi ? 5 : 0), CostCoins = cost, CreatedAt = Now, RoundStartedAt = Now
+                DefenseBonusPct = defLevel * 8 + (defender.IsAi ? 5 : 0) + WarRules.FortifyDefensePct(fort), CostCoins = cost, CreatedAt = Now, RoundStartedAt = Now
             };
             Db.Battles.Add(b);
             await Db.SaveChangesAsync();
@@ -856,7 +858,8 @@ namespace AndijonSaltanatlar.Server.Services
         {
             if (await Db.Regions.CountAsync(x => x.WorldId == winner.WorldId && x.OwnerKingdomId == expectedOwner) <= 1) return false;
             int moved = await Db.Regions.Where(x => x.Id == r.Id && x.OwnerKingdomId == expectedOwner)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, winner.Id).SetProperty(x => x.Stability, x => x.Stability > 20 ? x.Stability - 20 : 0));
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, winner.Id).SetProperty(x => x.Stability, x => x.Stability > 20 ? x.Stability - 20 : 0)
+                    .SetProperty(x => x.Fortify, 0));   // devorlar buzilgan — yangi ega qaytadan kuchaytiradi
             if (moved == 0) return false;
             var cityIds = await Db.Cities.Where(c => c.RegionId == r.Id).Select(c => c.Id).ToListAsync();
             await Db.Cities.Where(c => c.RegionId == r.Id).ExecuteUpdateAsync(s => s
@@ -1200,7 +1203,7 @@ namespace AndijonSaltanatlar.Server.Services
                 await Db.Armies.Where(x => x.Id == a.Id && x.Status == traveling).ExecuteUpdateAsync(s => s.SetProperty(x => x.StatusUntil, later));
                 return;
             }
-            if (!def.IsAi && await PvpTargetBlockAsync(def) != null)
+            if (!attacker.IsAi && !def.IsAi && await PvpTargetBlockAsync(def) != null)
             {
                 await Db.Armies.Where(x => x.Id == a.Id && x.Status == traveling).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, available));
                 Emit(attacker.WorldId, "WarNotice", attacker.Id, a.Name + ": " + def.Name + " endi PvP qabul qilmaydi — qo'shin qaytdi");
@@ -1222,10 +1225,109 @@ namespace AndijonSaltanatlar.Server.Services
             if (def.IsAi) await AiReplenishAsync(def, dArmy);
             bool capital = await IsCapitalOrLastAsync(r);
             ArmyEntity attackerArmy = await Db.Armies.AsNoTracking().FirstAsync(x => x.Id == a.Id);
-            BattleEntity b = await CreateBattleAsync(attacker.WorldId, isPvp: !def.IsAi, r.Id, territoryStake: !capital, attacker, attackerArmy, def, dArmy, WarRules.MarchCost);
+            BattleEntity b = await CreateBattleAsync(attacker.WorldId, isPvp: !def.IsAi && !attacker.IsAi, r.Id, territoryStake: !capital, attacker, attackerArmy, def, dArmy, WarRules.MarchCost);
             if (capital) await Db.Battles.Where(x => x.Id == b.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsCapitalSiege, true));
             if (def.IsAi) await AddAiDecisionAsync(b, def);
+            if (attacker.IsAi) await AddAiDecisionAsync(b, attacker);   // AI hujumi: sarkarda qarori darhol
             Emit(attacker.WorldId, "BattleStarted", b.Id, attacker.Id, def.Id);
+        }
+
+        // ==================================================================
+        // QASRNI KUCHAYTIRISH va AI DAVLATLAR HUJUMI
+        // ==================================================================
+
+        /// <summary>O'yinchi hozir o'yindami — AI faqat shunday o'yinchiga hujum qiladi (sinovlarda almashtiriladi).</summary>
+        public Func<Kingdom, bool> IsPlayerOnline { get; set; } = k => k.OwnerUserId != null && AndijonSaltanatlar.Server.Hubs.GameHub.IsUserOnline(k.OwnerUserId.Value);
+
+        /// <summary>Egallangan qasrni bir daraja kuchaytirish (poytaxt emas): tanga shartli yechiladi, daraja shartli oshadi.</summary>
+        public Task<ActionResultDto> FortifyRegionAsync(Kingdom me, FortifyRequest req) => _online.RunCommandAsync(me, req?.CommandId, async () =>
+        {
+            RegionEntity r = await Db.Regions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == req.RegionId && x.WorldId == me.WorldId);
+            if (r == null) return "Qasr topilmadi";
+            if (r.OwnerKingdomId != me.Id) return "Bu qasr sizniki emas";
+            if (await IsCapitalOrLastAsync(r)) return "Poytaxtingiz — uning binolarini shaharning o'zida yaxshilaysiz";
+            int level = r.Fortify;
+            if (level >= WarRules.MaxFortify) return "Qal'a eng yuqori darajada";
+            int cost = WarRules.FortifyCost(level);
+            int paid = await Db.KingdomResources.Where(x => x.KingdomId == me.Id && x.Coin >= cost).ExecuteUpdateAsync(s => s.SetProperty(x => x.Coin, x => x.Coin - cost));
+            if (paid == 0) return "Tanga yetarli emas (" + cost + ")";
+            int rid = r.Id, owner = me.Id;
+            int up = await Db.Regions.Where(x => x.Id == rid && x.OwnerKingdomId == owner && x.Fortify == level).ExecuteUpdateAsync(s => s.SetProperty(x => x.Fortify, level + 1));
+            if (up == 0) return "Qasr hozirgina o'zgardi — qayta urining";
+            return null;
+        }, "Qasr himoyasi kuchaydi");
+
+        /// <summary>
+        /// AI davlatlar o'yinchilarga hujum qiladi — faqat o'yindagi (IsPlayerOnline) va yangi o'yinchi himoyasida bo'lmagan
+        /// o'yinchilarga, har biri uchun o'z jadvali bilan (KingdomWarStateEntity.NextAiAttackAt). Nishon: egallangan qasr (60%)
+        /// yoki poytaxt; hujumchi — nishonga eng yaqin AI qasri egasi. Keyin odatdagi zanjir: "ArmyMarching" (o'yinchida
+        /// ogohlantirish) → yetib kelish → jang (o'yinchi o'zi qaror qiladi) → g'alabada qasr AI ga o'tadi, poytaxtda — o'lja.
+        /// Bir o'yinchiga bir vaqtda bitta AI yurishi.
+        /// </summary>
+        public async Task AiAggressionAsync(int worldId)
+        {
+            var kingdoms = await Db.Kingdoms.AsNoTracking().Where(k => k.WorldId == worldId).ToListAsync();
+            var aiIds = kingdoms.Where(k => k.IsAi).Select(k => k.Id).ToList();
+            if (aiIds.Count == 0) return;
+            var regions = await Db.Regions.AsNoTracking().Where(r => r.WorldId == worldId).ToListAsync();
+            int traveling = (int)ArmyStatus.Traveling, available = (int)ArmyStatus.Available, inProgress = (int)BattleStatus.InProgress;
+            foreach (Kingdom p in kingdoms.Where(k => !k.IsAi && k.OwnerUserId != null))
+            {
+                if (!IsPlayerOnline(p) || await IsProtectedAsync(p)) continue;
+                var mine = regions.Where(r => r.OwnerKingdomId == p.Id).ToList();
+                if (mine.Count == 0) continue;
+                KingdomWarStateEntity st = await EnsureStateAsync(p);
+                int stId = st.Id;
+                if (st.NextAiAttackAt == default)
+                {
+                    DateTime first = Now.AddSeconds(WarRules.AiAttackFirstDelaySeconds);
+                    await Db.WarStates.Where(s => s.Id == stId).ExecuteUpdateAsync(s => s.SetProperty(x => x.NextAiAttackAt, first));
+                    continue;
+                }
+                if (Now < st.NextAiAttackAt) continue;
+                var mineIds = mine.Select(r => r.Id).ToList();
+                if (await Db.Armies.AnyAsync(a => a.Status == traveling && aiIds.Contains(a.KingdomId) && mineIds.Contains(a.TargetRegionId))) continue;
+                if (await Db.Battles.AnyAsync(b => b.Status == inProgress && (b.AttackerKingdomId == p.Id || b.DefenderKingdomId == p.Id))) continue;
+
+                var rng = new Random(HashCode.Combine(p.Id, Now.Ticks));
+                var capitals = new List<RegionEntity>();
+                var conquered = new List<RegionEntity>();
+                foreach (RegionEntity r in mine) (await IsCapitalOrLastAsync(r) ? capitals : conquered).Add(r);
+                RegionEntity target = conquered.Count > 0 && rng.Next(100) < 60 ? conquered[rng.Next(conquered.Count)] : capitals.FirstOrDefault() ?? mine[0];
+                DateTime next = Now.AddSeconds(WarRules.AiAttackGapSeconds(conquered.Count > 0, rng.Next(100)));
+                await Db.WarStates.Where(s => s.Id == stId).ExecuteUpdateAsync(s => s.SetProperty(x => x.NextAiAttackAt, next));
+
+                RegionEntity origin = regions.Where(r => aiIds.Contains(r.OwnerKingdomId)).OrderBy(r => Dist2(r, target)).FirstOrDefault();
+                if (origin == null) continue;   // yaqinda AI qasri yo'q
+                Kingdom ai = kingdoms.First(k => k.Id == origin.OwnerKingdomId);
+                KingdomConflictEntity c = await ConflictAsync(worldId, ai.Id, p.Id);
+                if (c != null && c.TruceUntil > Now) continue;   // sulh — hujum yo'q
+                await EnsureStateAsync(ai);
+                ArmyEntity army = null;
+                int best = -1;
+                foreach (ArmyEntity a in await Db.Armies.AsNoTracking().Where(a => a.KingdomId == ai.Id && !a.IsGarrison && a.Status == available).ToListAsync())
+                {
+                    await AiReplenishAsync(ai, a);
+                    int strength = await ArmyStrengthAsync(a);
+                    if (strength > best && WarRules.CombatUnitCount(Tuples(await GroupsAsync(a.Id))) >= WarRules.MinBattleArmy) { best = strength; army = a; }
+                }
+                if (army == null) continue;
+                int seconds = Math.Max(WarRules.AiMarchMinSeconds, WarRules.MarchSeconds(origin.Latitude, origin.Longitude, target.Latitude, target.Longitude));
+                DateTime depart = Now, arrive = Now.AddSeconds(seconds);
+                int oid = origin.Id, tid = target.Id, aid = army.Id;
+                int moved = await Db.Armies.Where(a => a.Id == aid && a.Status == available).ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.Status, traveling).SetProperty(a => a.OriginRegionId, oid).SetProperty(a => a.TargetRegionId, tid)
+                    .SetProperty(a => a.DepartAt, depart).SetProperty(a => a.StatusUntil, arrive));
+                if (moved == 0) continue;
+                await SetConflictAsync(worldId, ai.Id, p.Id, active: true, truceUntil: null);
+                Emit(worldId, "ArmyMarching", army.Id, ai.Id, p.Id, target.Name, seconds, ai.Name);
+            }
+        }
+
+        private static double Dist2(RegionEntity a, RegionEntity b)
+        {
+            double dx = a.Latitude - b.Latitude, dy = a.Longitude - b.Longitude;
+            return dx * dx + dy * dy;
         }
 
         /// <summary>Server tiki (har 2 soniya, o'yinchilar offline bo'lsa ham): yetib kelgan yurishlar va faol janglar.</summary>
@@ -1286,10 +1388,13 @@ namespace AndijonSaltanatlar.Server.Services
                     Flag = WorldSeeder.FlagOf(owner), Province = r.Province ?? "",
                     MapX = (float)r.Latitude, MapY = (float)r.Longitude, Population = pop
                 };
+                m.FortifyLevel = r.Fortify;
+                m.CanFortify = m.IsMine && !capital && r.Fortify < WarRules.MaxFortify;
                 if (owner != null && !m.IsMine)
                 {
                     int st = await StrengthOf(owner.Id);
-                    m.DefenseEstimate = st > 0 ? st : WarRules.GarrisonSize(pop) * 10;
+                    int baseDef = st > 0 ? st : WarRules.GarrisonSize(pop) * 10;
+                    m.DefenseEstimate = (int)(baseDef * (1 + WarRules.FortifyDefensePct(r.Fortify) / 100f));   // kuchaytirilgan qasr qattiqroq
                 }
                 if (home != null) m.MarchSeconds = WarRules.MarchSeconds(home.Latitude, home.Longitude, r.Latitude, r.Longitude);
                 string block = m.IsMine ? "Sizning qasringiz" : owner == null ? "Mustaqil hudud — diplomatik yo'l bilan qo'shib oling" : null;

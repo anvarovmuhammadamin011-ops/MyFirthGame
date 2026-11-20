@@ -507,7 +507,7 @@ namespace AndijonSaltanatlar.Server.Services
                 }
                 // transfer region + cities + buildings — egalik SHARTLI o'zgaradi: parallel ikkinchi kelishuv 0 qator o'zgartiradi.
                 int moved = await Db.Regions.Where(x => x.Id == region.Id && x.OwnerKingdomId == a.FromKingdomId)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, me.Id));
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, me.Id).SetProperty(x => x.Fortify, 0));
                 if (moved == 0) return "Hudud egasi hozirgina o'zgardi — kelishuv bekor";
                 var cityIds = await Db.Cities.Where(c => c.RegionId == region.Id).Select(c => c.Id).ToListAsync();
                 await Db.Cities.Where(c => c.RegionId == region.Id).ExecuteUpdateAsync(s => s

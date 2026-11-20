@@ -26,7 +26,9 @@ namespace AndijonSaltanatlar.Online
         public int Seconds { get; set; }
         /// <summary>Nishonning himoya darajasi (0..5).</summary>
         public int Fortify { get; set; }
-        public bool IsHome => Target == LocalWorld.HomeRegion;
+        /// <summary>Nishon — poytaxt (serversizda Asaka, onlaynda o'yinchining bosh shahri).</summary>
+        public bool Home { get; set; }
+        public bool IsHome => Home;
     }
 
     /// <summary>
@@ -43,7 +45,7 @@ namespace AndijonSaltanatlar.Online
         private const string Player = "player";
         public const string HomeRegion = "Asaka";
         /// <summary>Qasr himoyasining eng yuqori darajasi.</summary>
-        public const int MaxFortify = 5;
+        public const int MaxFortify = AndijonSaltanatlar.Shared.War.WarRules.MaxFortify;
         /// <summary>Yangi dunyoda birinchi AI hujumigacha o'yin vaqti (soniya).</summary>
         public const float FirstAttackDelay = 480f;
 
@@ -224,7 +226,7 @@ namespace AndijonSaltanatlar.Online
         }
 
         /// <summary>Joriy darajadan keyingisiga o'tish narxi (tanga): 150, 270, 390, 510, 630.</summary>
-        public static int FortifyCost(int currentLevel) => 150 + 120 * Math.Clamp(currentLevel, 0, MaxFortify - 1);
+        public static int FortifyCost(int currentLevel) => AndijonSaltanatlar.Shared.War.WarRules.FortifyCost(currentLevel);
 
         /// <summary>Kuchaytirish mumkinmi: qasr o'yinchiniki, bosh shahar (Asaka) emas va daraja to'lmagan.</summary>
         public bool CanFortify(int regionId)
@@ -316,7 +318,7 @@ namespace AndijonSaltanatlar.Online
             return new AttackEvent
             {
                 Kind = AttackEventKind.Started, Attacker = KingdomName(_d.March.Attacker), Target = t.Name,
-                TargetRegionId = RegionIdOf(t.Name), Seconds = (int)Math.Ceiling(_d.March.Total), Fortify = FortifyOf(t.Name)
+                TargetRegionId = RegionIdOf(t.Name), Seconds = (int)Math.Ceiling(_d.March.Total), Fortify = FortifyOf(t.Name), Home = t.Name == HomeRegion
             };
         }
 
@@ -325,7 +327,7 @@ namespace AndijonSaltanatlar.Online
         {
             _d.March = null;
             ScheduleNext();
-            var ev = new AttackEvent { Attacker = KingdomName(m.Attacker), Target = m.Target, TargetRegionId = RegionIdOf(m.Target), Fortify = FortifyOf(m.Target) };
+            var ev = new AttackEvent { Attacker = KingdomName(m.Attacker), Target = m.Target, TargetRegionId = RegionIdOf(m.Target), Fortify = FortifyOf(m.Target), Home = m.Target == HomeRegion };
             MapRegionSeed r = UzMap.Regions.FirstOrDefault(x => x.Name == m.Target);
             if (m.Target == HomeRegion || r == null)
             {

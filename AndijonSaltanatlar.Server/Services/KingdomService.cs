@@ -134,7 +134,7 @@ namespace AndijonSaltanatlar.Server.Services
                 if (block.Length > 0) return block;
 
                 int moved = await Db.Regions.Where(x => x.Id == r.Id && x.OwnerKingdomId == r.OwnerKingdomId)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, me.Id).SetProperty(x => x.Stability, x => x.Stability > 15 ? x.Stability - 15 : 0));
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerKingdomId, me.Id).SetProperty(x => x.Stability, x => x.Stability > 15 ? x.Stability - 15 : 0).SetProperty(x => x.Fortify, 0));
                 if (moved == 0) return "Hudud egasi hozirgina o'zgardi — qayta urining";
                 int paid = await Db.KingdomResources.Where(x => x.KingdomId == me.Id && x.Coin >= cost)
                     .ExecuteUpdateAsync(s => s.SetProperty(x => x.Coin, x => x.Coin - cost));

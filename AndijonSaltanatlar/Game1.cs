@@ -615,14 +615,15 @@ public sealed class Game1 : Game
 			if (nl > 0) _state.LandChanged = true;   // sarflangan tanga ham darhol saqlansin (daraja allaqachon saqlangan)
 			return nl;
 		};
+		_visit.Coins = () => _visitOnline ? (_online?.War?.Coin ?? 0) : _state.Coins;
 		_visit.ThreatText = () =>
 		{
-			var m = _localWorld?.IncomingMarch;
-			if (m == null || _visit == null) return null;
-			string who = AndijonSaltanatlar.Online.LocalWorld.KingdomName(m.Attacker) + " qo'shini ";
-			string left = " - " + (int)Math.Ceiling(Math.Max(0f, m.Left)) + " s";
-			return m.Target == _visit.RegionName ? "DIQQAT! " + who + "SHU SHAHARGA kelmoqda" + left + ". Tezroq kuchaytiring!"
-				: "DIQQAT! " + who + m.Target + " tomon kelmoqda" + left;
+			var t = CurrentThreat();
+			if (t == null || _visit == null) return null;
+			string who = t.Value.Attacker + " qo'shini ";
+			string left = " - " + (int)Math.Ceiling(t.Value.Left) + " s";
+			return t.Value.Target == _visit.RegionName ? "DIQQAT! " + who + "SHU SHAHARGA kelmoqda" + left + ". Tezroq kuchaytiring!"
+				: "DIQQAT! " + who + t.Value.Target + " tomon kelmoqda" + left;
 		};
 		_pendingHomeRaid = null;
 		_siegeTestPending = _opt.SiegeRegion.HasValue;
@@ -1883,12 +1884,22 @@ public sealed class Game1 : Game
 		{
 			var v = _onlinePanel.VisitRequested;
 			_onlinePanel.VisitRequested = null;
+			_visitOnline = !_onlinePanel.LocalMode;   // onlayn dunyo xaritasidan — server qasri
 			if (_onlinePanel.IsOpen) _onlinePanel.Close();
 			if (_interior != null && _interior.Active) _interior.Exit();
 			if (_combat != null && _combat.Possessed != null) _combat.Release(false);
 			_strategicMode = _civMode = _questMode = false;
-			if (!_visit.Start(v.RegionId, v.Name, LocalWorldNow().FortifyLevel(v.RegionId), GraphicsDevice.Viewport))
-				_onlinePanel.OpenLocalWorldMap();
+			_visit.RequestFortify = _visitOnline
+				? (rid, done) =>
+				{
+					// Server band yoki ulanmagan bo'lsa buyruq yuborilmaydi (callback chaqirilmaydi) — tugma qotib qolmasin
+					if (!_online.LoggedIn || _online.WarBusy) { done(-2); return; }
+					_online.FortifyRegion(rid, ok => done(ok ? _visit.Level + 1 : -1));
+				}
+				: null;
+			int level = _visitOnline ? v.FortifyLevel : LocalWorldNow().FortifyLevel(v.RegionId);
+			if (!_visit.Start(v.RegionId, v.Name, level, GraphicsDevice.Viewport))
+				ReturnFromVisit();
 		}
 		if (_siegeFromMap && !_siege.Active)
 		{
@@ -2240,6 +2251,7 @@ public sealed class Game1 : Game
 		_ui.PhaseName = _dayNight.PhaseName;
 		AnnounceSeason();
 		UpdateLocalWar(_state.Paused ? 0f : num);
+		UpdateOnlineWar();
 		// Avtomatik saqlash: har 30 soniyada va yer ochilganda darhol (o'yin doim serverda).
 		if (CloudSignedIn)
 		{
@@ -2386,7 +2398,7 @@ public sealed class Game1 : Game
 		}
 	}
 
-	private void HandleAttackEvent(AndijonSaltanatlar.Online.AttackEvent e)
+	private void HandleAttackEvent(AndijonSaltanatlar.Online.AttackEvent e, bool online = false)
 	{
 		if (e == null) return;
 		_localOverview = null;   // xaritada yurish/bayroq yangilansin
@@ -2400,7 +2412,7 @@ public sealed class Game1 : Game
 				_state.ShowVizier("Sizga hujum boshlandi!",
 					"Hazratim, " + e.Attacker + " bizga urush e'lon qildi! Qo'shini " + where + " tomon yo'lga chiqdi va " + e.Seconds + " soniyada yetib keladi. "
 					+ (e.IsHome
-						? "Jangchilaringizni tayyorlang - shahar darvozasida jang bo'ladi!"
+						? (online ? "Qo'shiningizni tayyorlang - jang boshlanganda har raundda o'zingiz buyruq berasiz!" : "Jangchilaringizni tayyorlang - shahar darvozasida jang bo'ladi!")
 						: "Qasr himoyasi: " + e.Fortify + "/" + max + ". Tezroq kuchaytiring: M xarita - " + e.Target + " - SHAHARGA KIRISH - KUCHAYTIRISH."));
 				_camera?.Shake(3f, 0.35f);
 				break;
@@ -2428,20 +2440,72 @@ public sealed class Game1 : Game
 	private void ReturnFromVisit()
 	{
 		_localOverview = null;
-		if (!_onlinePanel.IsOpen) _onlinePanel.OpenLocalWorldMap();
+		if (_visitOnline)
+		{
+			_online.LoadWar();   // yangi himoya darajasi xaritada ko'rinsin
+			if (!_onlinePanel.IsOpen) _onlinePanel.ToggleWorldMap();
+		}
+		else if (!_onlinePanel.IsOpen) _onlinePanel.OpenLocalWorldMap();
 		_onlinePanel.SelectMapRegion(_visit.RegionId);
+	}
+
+	// ------------------------------------------------------------------ ONLAYN: AI/raqib hujumi ogohlantirishi
+	/// <summary>Shahardagi tashrif onlayn dunyo qasriga (kuchaytirish serverda).</summary>
+	private bool _visitOnline;
+	/// <summary>Ogohlantirilgan (sizga kelayotgan) yurishlar — har biri bir marta e'lon qilinadi.</summary>
+	private readonly HashSet<int> _announcedMarches = new HashSet<int>();
+
+	/// <summary>Hozir sizga kelayotgan dushman (serversiz yoki onlayn): kim, qaysi qasringizga, necha soniyada, poytaxtmi.</summary>
+	private (string Attacker, string Target, float Left, bool Home)? CurrentThreat()
+	{
+		if (LocalWarActive && _localWorld?.IncomingMarch is AndijonSaltanatlar.Online.LocalWorld.AiMarch lm)
+			return (AndijonSaltanatlar.Online.LocalWorld.KingdomName(lm.Attacker), lm.Target, Math.Max(0f, lm.Left), lm.Target == AndijonSaltanatlar.Online.LocalWorld.HomeRegion);
+		var w = _online != null && _online.LoggedIn ? _online.War : null;
+		var om = w?.Marches.FirstOrDefault(x => x.TargetIsMine && !x.IsMine);
+		if (om == null) return null;
+		float left = Math.Max(0f, om.SecondsLeft - (float)(DateTime.UtcNow - _online.WarReceivedAt).TotalSeconds);
+		bool home = w.MapRegions.FirstOrDefault(r => r.RegionId == om.TargetRegionId)?.IsCapital ?? false;
+		return (om.KingdomName, om.TargetName, left, home);
+	}
+
+	/// <summary>
+	/// Onlayn: serverdan kelgan har yangi "sizga kelayotgan" yurish uchun — qizil xabar, vazir oynasi va kamera silkinishi
+	/// (bir marta); egallangan qasr qo'ldan ketsa ichidagi tashrif yopiladi.
+	/// </summary>
+	private void UpdateOnlineWar()
+	{
+		var w = _online != null && _online.LoggedIn && !_loginMode && !_menuMode ? _online.War : null;
+		if (w == null) return;
+		var incoming = w.Marches.Where(x => x.TargetIsMine && !x.IsMine).ToList();
+		foreach (var m in incoming)
+		{
+			if (!_announcedMarches.Add(m.ArmyId)) continue;
+			var region = w.MapRegions.FirstOrDefault(r => r.RegionId == m.TargetRegionId);
+			HandleAttackEvent(new AndijonSaltanatlar.Online.AttackEvent
+			{
+				Kind = AndijonSaltanatlar.Online.AttackEventKind.Started, Attacker = m.KingdomName, Target = m.TargetName,
+				TargetRegionId = m.TargetRegionId, Seconds = m.SecondsLeft, Fortify = region?.FortifyLevel ?? 0, Home = region?.IsCapital ?? false
+			}, online: true);
+		}
+		_announcedMarches.RemoveWhere(id => !incoming.Any(x => x.ArmyId == id));
+		if (VisitActive && _visitOnline && w.MapRegions.FirstOrDefault(r => r.RegionId == _visit.RegionId) is { IsMine: false } lost)
+		{
+			_state.ShowMessage(lost.Name + " qasri qo'ldan ketdi! " + lost.OwnerName + " uni egallab oldi.", true);
+			_visit.Close();
+			ReturnFromVisit();
+		}
 	}
 
 	/// <summary>Bosh shahar ekranida, yurish davom etar ekan — tepada miltillovchi qizil banner (toast yo'qolsa ham ko'rinib turadi).</summary>
 	private void DrawAttackBanner(int vw, int vh)
 	{
-		var m = LocalWarActive ? _localWorld?.IncomingMarch : null;
-		if (m == null) return;
+		var t = CurrentThreat();
+		if (t == null) return;
 		LegacyUiSize(out float hs);
 		int k = Math.Max(1, (int)Math.Round(hs));
 		int s = 2 * k;
-		string text = "HUJUM: " + AndijonSaltanatlar.Online.LocalWorld.KingdomName(m.Attacker) + " qo'shini " + m.Target + " tomon kelmoqda - "
-			+ (int)Math.Ceiling(Math.Max(0f, m.Left)) + " s" + (m.Target == AndijonSaltanatlar.Online.LocalWorld.HomeRegion ? "" : "  (M - kuchaytirish)");
+		string text = "HUJUM: " + t.Value.Attacker + " qo'shini " + t.Value.Target + " tomon kelmoqda - "
+			+ (int)Math.Ceiling(t.Value.Left) + " s" + (t.Value.Home ? "" : "  (M - kuchaytirish)");
 		var lines = HudText.Wrap(_font, text, s, vw - 40 * k, 2);
 		float pulse = 0.8f + 0.2f * MathF.Sin(_time * 6f);
 		_sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);

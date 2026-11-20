@@ -307,9 +307,9 @@ namespace AndijonSaltanatlar.UI
             if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · yurish tekin", T.TextSecondary);
             if (r.OutcomeUz.Length > 0 && (!tight || r.IsMine)) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
             // Serversiz dunyo: egallangan qasr (Asaka emas) — himoya darajasi va shaharga kirib kuchaytirish
-            if (r.IsMine && LocalMode && r.Name != AndijonSaltanatlar.Online.LocalWorld.HomeRegion)
+            if (r.IsMine && (LocalMode ? r.Name != AndijonSaltanatlar.Online.LocalWorld.HomeRegion : !r.IsCapital))
             {
-                int lv = LocalFortifyLevel?.Invoke(r.RegionId) ?? 0;
+                int lv = LocalMode ? LocalFortifyLevel?.Invoke(r.RegionId) ?? 0 : r.FortifyLevel;
                 int max = AndijonSaltanatlar.Online.LocalWorld.MaxFortify;
                 Row("Himoya darajasi: " + lv + "/" + max, lv >= max ? T.Primary : lv == 0 ? T.Warning : T.TextPrimary);
                 Row(lv < max ? "Keyingi daraja: " + AndijonSaltanatlar.Online.LocalWorld.FortifyCost(lv) + " tanga" : "Qal'a eng yuqori darajada", T.TextSecondary);

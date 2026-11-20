@@ -62,6 +62,7 @@ namespace AndijonSaltanatlar.Server.Simulation
             foreach (int worldId in await db.Worlds.Select(w => w.Id).ToListAsync())
             {
                 await war.TickWorldAsync(worldId);
+                if (_tick % SlowEvery == 0) await war.AiAggressionAsync(worldId);   // AI davlatlar o'yindagi o'yinchilarga hujum qiladi
                 foreach (WarEvent e in war.Events)
                     await _hub.Clients.Group(GameHub.WorldGroup(e.WorldId)).SendCoreAsync(e.Name, e.Args);
                 war.Events.Clear();

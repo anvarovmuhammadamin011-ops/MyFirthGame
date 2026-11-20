@@ -522,5 +522,131 @@ namespace AndijonSaltanatlar.Tests
             await Overview(me);
             Assert.Equal(1000 - upkeep, await Coin(me.Id));
         }
+    
+        // ------------------------------------------------------------------ Qasrni kuchaytirish va AI hujumi (onlayn)
+
+        /// <summary>AI qasrini to'g'ridan-to'g'ri o'yinchiga beradi (egallangan qasr) — sinov uchun.</summary>
+        private async Task<int> GiveCastle(Kingdom me)
+        {
+            WarMapRegionDto castle = (await Overview(me)).MapRegions.First(r => !r.IsMine && r.OwnerIsAi && r.OwnerKingdomId != 0 && !r.IsCapital);
+            using GameDbContext db = NewDb();
+            await db.Regions.Where(r => r.Id == castle.RegionId).ExecuteUpdateAsync(s => s.SetProperty(r => r.OwnerKingdomId, me.Id));
+            return castle.RegionId;
+        }
+
+        private async Task<ActionResultDto> Fortify(Kingdom me, int regionId)
+        {
+            using GameDbContext db = NewDb();
+            return await War(db).FortifyRegionAsync(me, new FortifyRequest { CommandId = Id(), RegionId = regionId });
+        }
+
+        [Fact]
+        public async Task Fortify_ConqueredCastle_CostsCoins_UpToMax_CapitalAndForeignRefused()
+        {
+            Kingdom me = await Player("asaka", 5000);
+            int castle = await GiveCastle(me);
+            WarMapRegionDto m = (await Overview(me)).MapRegions.Single(r => r.RegionId == castle);
+            Assert.True(m.IsMine && m.CanFortify);
+            Assert.Equal(0, m.FortifyLevel);
+            int spent = 0;
+            for (int lv = 0; lv < WarRules.MaxFortify; lv++)
+            {
+                Assert.True((await Fortify(me, castle)).Success);
+                spent += WarRules.FortifyCost(lv);
+            }
+            Assert.Equal(5000 - spent, await Coin(me.Id));
+            m = (await Overview(me)).MapRegions.Single(r => r.RegionId == castle);
+            Assert.Equal(WarRules.MaxFortify, m.FortifyLevel);
+            Assert.False(m.CanFortify);
+            Assert.False((await Fortify(me, castle)).Success);                       // 5 dan oshmaydi
+            int capital = (await Overview(me)).MapRegions.Single(r => r.IsMine && r.IsCapital).RegionId;
+            Assert.False((await Fortify(me, capital)).Success);                       // poytaxt — shahar ichida
+            int foreign = (await Overview(me)).MapRegions.First(r => !r.IsMine && r.OwnerKingdomId != 0).RegionId;
+            Assert.False((await Fortify(me, foreign)).Success);
+            Assert.Equal(5000 - spent, await Coin(me.Id));                            // rad etilganda tanga yechilmaydi
+        }
+
+        [Fact]
+        public async Task Fortify_RaisesDefenseSeenByOthers()
+        {
+            Kingdom me = await Player("asaka", 5000);
+            Kingdom other = await Player("pc", 1000);
+            int castle = await GiveCastle(me);
+            int before = (await Overview(other)).MapRegions.Single(r => r.RegionId == castle).DefenseEstimate;
+            for (int i = 0; i < 3; i++) Assert.True((await Fortify(me, castle)).Success);
+            int after = (await Overview(other)).MapRegions.Single(r => r.RegionId == castle).DefenseEstimate;
+            Assert.True(after > before, before + " -> " + after);
+        }
+
+        [Fact]
+        public async Task AiAttack_OnlinePlayer_WarningMarch_ThenBattleWithFortifyBonus()
+        {
+            Kingdom me = await Player("asaka", 5000);
+            int castle = await GiveCastle(me);
+            for (int i = 0; i < 3; i++) Assert.True((await Fortify(me, castle)).Success);
+
+            using (GameDbContext db = NewDb())
+            {
+                WarService w = War(db);
+                w.IsPlayerOnline = _ => true;
+                await w.AiAggressionAsync(1);                                        // birinchi ko'rish: jadval tuziladi
+                Assert.DoesNotContain(w.Events, e => e.Name == "ArmyMarching");
+            }
+            Assert.Empty((await Overview(me)).Marches.Where(x => x.TargetIsMine));
+            _clock.Advance(WarRules.AiAttackFirstDelaySeconds + 1);
+            using (GameDbContext db = NewDb())
+            {
+                WarService w = War(db);
+                w.IsPlayerOnline = _ => true;
+                await w.AiAggressionAsync(1);
+                WarEvent ev = Assert.Single(w.Events, e => e.Name == "ArmyMarching");
+                Assert.Equal(me.Id, (int)ev.Args[2]);                                 // himoyachi — o'yinchi
+            }
+            WarOverviewDto o = await Overview(me);
+            MarchDto march = Assert.Single(o.Marches, x => x.TargetIsMine);
+            Assert.False(march.IsMine);
+            Assert.True(march.SecondsLeft >= WarRules.AiMarchMinSeconds - 1);
+            using (GameDbContext db = NewDb())
+            {
+                WarService w = War(db);
+                w.IsPlayerOnline = _ => true;
+                _clock.Advance(WarRules.AiAttackGapSeconds(true, 99) + 1);
+                await w.AiAggressionAsync(1);                                        // bir vaqtda bitta yurish
+                Assert.DoesNotContain(w.Events, e => e.Name == "ArmyMarching");
+            }
+
+            _clock.Advance(march.SecondsLeft + 1);
+            await TickWorld();                                                        // yetib keldi → jang
+            o = await Overview(me);
+            Assert.NotNull(o.ActiveBattle);
+            using GameDbContext db2 = NewDb();
+            var b = await db2.Battles.SingleAsync(x => x.Id == o.ActiveBattle.Id);
+            Assert.Equal(me.Id, b.DefenderKingdomId);
+            Assert.False(b.IsPvp);                                                    // AI hujumi — PvP emas
+            int fort = await db2.Regions.Where(r => r.Id == b.RegionId).Select(r => r.Fortify).FirstAsync();
+            int mudofaa = await db2.MilitaryFacilities.Where(f => f.KingdomId == me.Id && f.Kind == (int)FacilityKind.Mudofaa).Select(f => f.Level).FirstOrDefaultAsync();
+            Assert.Equal(mudofaa * 8 + WarRules.FortifyDefensePct(fort), b.DefenseBonusPct);
+            Assert.True(await db2.BattleDecisions.AnyAsync(d => d.BattleId == b.Id && d.KingdomId == b.AttackerKingdomId));   // AI qarori bor
+        }
+
+        [Fact]
+        public async Task AiAttack_SkipsOfflineAndNewPlayers()
+        {
+            Kingdom offline = await Player("uxlayotgan", 1000);
+            Kingdom newbie = await Player("yangi", 1000, oldAccount: false);
+            for (int step = 0; step < 2; step++)
+            {
+                using (GameDbContext db = NewDb())
+                {
+                    WarService w = War(db);
+                    w.IsPlayerOnline = k => k.Id == newbie.Id;                         // faqat yangi o'yinchi onlayn
+                    await w.AiAggressionAsync(1);
+                    Assert.DoesNotContain(w.Events, e => e.Name == "ArmyMarching");
+                }
+                _clock.Advance(WarRules.AiAttackFirstDelaySeconds + 1);
+            }
+            Assert.Empty((await Overview(offline)).Marches.Where(x => x.TargetIsMine));
+            Assert.Empty((await Overview(newbie)).Marches.Where(x => x.TargetIsMine));
+        }
     }
 }

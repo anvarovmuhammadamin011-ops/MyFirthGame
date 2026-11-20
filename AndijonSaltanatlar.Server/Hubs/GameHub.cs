@@ -25,6 +25,16 @@ namespace AndijonSaltanatlar.Server.Hubs
     public class GameHub : Hub
     {
         private static readonly ConcurrentDictionary<string, (int world, string name)> Connections = new();
+        /// <summary>Ulangan foydalanuvchilar (connection → foydalanuvchi id) — AI hujumi faqat o'yindagi o'yinchiga qaratiladi.</summary>
+        private static readonly ConcurrentDictionary<string, string> ConnectionUsers = new();
+
+        /// <summary>Foydalanuvchi hozir o'yinda (kamida bitta ulanish bor)mi.</summary>
+        public static bool IsUserOnline(int userId)
+        {
+            string id = userId.ToString();
+            foreach (string u in ConnectionUsers.Values) if (u == id) return true;
+            return false;
+        }
 
         // Dunyo umumiy chati — oxirgi xabarlar (xotirada, dunyo bo'yicha). Server qayta ishga tushsa tarix tozalanadi.
         private const int ChatHistoryMax = 50;
@@ -40,6 +50,7 @@ namespace AndijonSaltanatlar.Server.Hubs
         {
             string name = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "?";
             Connections[Context.ConnectionId] = (worldId, name);
+            if (Context.UserIdentifier != null) ConnectionUsers[Context.ConnectionId] = Context.UserIdentifier;
             await Groups.AddToGroupAsync(Context.ConnectionId, WorldGroup(worldId));
             await Clients.Group(WorldGroup(worldId)).SendAsync("PlayersChanged", worldId);
             // Qo'shilgan o'yinchiga oxirgi chat xabarlarini yuboramiz
@@ -73,12 +84,14 @@ namespace AndijonSaltanatlar.Server.Hubs
         public async Task LeaveWorld(int worldId)
         {
             Connections.TryRemove(Context.ConnectionId, out _);
+            ConnectionUsers.TryRemove(Context.ConnectionId, out _);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, WorldGroup(worldId));
             await Clients.Group(WorldGroup(worldId)).SendAsync("PlayersChanged", worldId);
         }
 
         public override async Task OnDisconnectedAsync(Exception exception)
         {
+            ConnectionUsers.TryRemove(Context.ConnectionId, out _);
             if (Connections.TryRemove(Context.ConnectionId, out var info))
                 await Clients.Group(WorldGroup(info.world)).SendAsync("PlayersChanged", info.world);
             await base.OnDisconnectedAsync(exception);

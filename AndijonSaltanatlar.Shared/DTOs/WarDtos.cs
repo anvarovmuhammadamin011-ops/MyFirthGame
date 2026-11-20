@@ -197,6 +197,10 @@ namespace AndijonSaltanatlar.Shared.DTOs
         public bool CanMarch { get; set; }
         /// <summary>Shahardagi o'z jangchilaringiz bilan qamal qilish mumkinmi (server qo'shini shart emas).</summary>
         public bool CanSiege { get; set; }
+        /// <summary>Qasr himoya darajasi (0..WarRules.MaxFortify) — o'zingizniki uchun kuchaytirish holati.</summary>
+        public int FortifyLevel { get; set; }
+        /// <summary>Shu qasrni hozir kuchaytirish mumkin (o'ziniki, poytaxt emas, daraja to'lmagan).</summary>
+        public bool CanFortify { get; set; }
         /// <summary>Qasr egasining hukmdori (qamalda saroyda o'ldiriladigan shoh).</summary>
         public string RulerName { get; set; } = "";
         public string BlockReasonUz { get; set; } = "";
@@ -262,6 +266,8 @@ namespace AndijonSaltanatlar.Shared.DTOs
     public sealed class RecruitRequest { public string CommandId { get; set; } = ""; public int ArmyId { get; set; } public UnitLine Line { get; set; } public int Count { get; set; } }
     public sealed class UpgradeUnitsRequest { public string CommandId { get; set; } = ""; public int ArmyId { get; set; } public UnitLine Line { get; set; } public int FromLevel { get; set; } public int Count { get; set; } }
     public sealed class FacilityRequest { public string CommandId { get; set; } = ""; public FacilityKind Kind { get; set; } }
+    /// <summary>Egallangan qasrni bir daraja kuchaytirish (devor, darvoza, minoralar).</summary>
+    public sealed class FortifyRequest { public string CommandId { get; set; } = ""; public int RegionId { get; set; } }
     public sealed class CommanderRequest { public string CommandId { get; set; } = ""; public int CommanderId { get; set; } public int ArmyId { get; set; } }
     public sealed class CreateArmyRequest { public string CommandId { get; set; } = ""; public string Name { get; set; } = ""; }
     /// <summary>Qamal: o'yinchi shahridagi jangchilar bilan qasrga yurish (jang o'yinchi kompyuterida, real vaqtda).</summary>

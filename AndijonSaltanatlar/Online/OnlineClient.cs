@@ -90,7 +90,10 @@ namespace AndijonSaltanatlar.Online
         public int LastTransferredRegionId { get; private set; }
 
         /// <summary>PROMPT 25: harbiy boshqaruv holati (qo'shinlar, sarkardalar, janglar, PvP takliflari).</summary>
-        public WarOverviewDto War { get; private set; }
+        public WarOverviewDto War { get => _war; private set { _war = value; WarReceivedAt = DateTime.UtcNow; } }
+        private WarOverviewDto _war;
+        /// <summary>War qachon olingan — yurishlar sanog'ini (SecondsLeft) jonli kamaytirish uchun.</summary>
+        public DateTime WarReceivedAt { get; private set; }
         /// <summary>Hozir ko'rsatilayotgan jang (server holati). Jang sahnasi shuni chizadi.</summary>
         public BattleDto Battle { get; private set; }
         /// <summary>Jang sahnasi ochilishi kerak bo'lgan jang (yangi jang boshlanganda / taklif qabul qilinganda).</summary>
@@ -531,6 +534,8 @@ namespace AndijonSaltanatlar.Online
         public void Recruit(int armyId, Shared.War.UnitLine line, int count) => WarCommand("api/war/recruit", id => new RecruitRequest { CommandId = id, ArmyId = armyId, Line = line, Count = count });
         public void UpgradeUnits(int armyId, Shared.War.UnitLine line, int fromLevel, int count) => WarCommand("api/war/upgrade", id => new UpgradeUnitsRequest { CommandId = id, ArmyId = armyId, Line = line, FromLevel = fromLevel, Count = count });
         public void BuildFacility(Shared.War.FacilityKind kind) => WarCommand("api/war/facility", id => new FacilityRequest { CommandId = id, Kind = kind });
+        /// <summary>Egallangan qasrni bir daraja kuchaytirish (tanga serverda yechiladi).</summary>
+        public void FortifyRegion(int regionId, Action<bool> done) => WarCommand("api/war/fortify", id => new FortifyRequest { CommandId = id, RegionId = regionId }, done);
         public void HireCommander() => WarCommand("api/war/commander/hire", id => new CommanderRequest { CommandId = id });
         public void AssignCommander(int commanderId, int armyId) => WarCommand("api/war/commander/assign", id => new CommanderRequest { CommandId = id, CommanderId = commanderId, ArmyId = armyId });
         public void CreateArmy(string name) => WarCommand("api/war/army/create", id => new CreateArmyRequest { CommandId = id, Name = name });

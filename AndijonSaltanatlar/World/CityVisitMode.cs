@@ -42,8 +42,18 @@ namespace AndijonSaltanatlar.World
         /// <summary>Joriy himoya darajasi (0..5).</summary>
         public int Level { get; private set; }
 
-        /// <summary>Kuchaytirishni saqlaydi (Game1 → LocalWorld.Fortify): yangi daraja yoki -1.</summary>
+        /// <summary>Kuchaytirishni saqlaydi (serversiz: Game1 → LocalWorld.Fortify): yangi daraja yoki -1. Tangani shu rejim yechadi.</summary>
         public Func<int, int> FortifyCommit;
+        /// <summary>
+        /// Onlayn: kuchaytirish so'rovi serverga (regionId, natija → yangi daraja yoki -1). Berilsa FortifyCommit o'rniga ishlaydi;
+        /// tangani server yechadi.
+        /// </summary>
+        public Action<int, Action<int>> RequestFortify;
+        /// <summary>Ko'rsatiladigan xazina (onlaynda — server tangasi). null — shahar xazinasi.</summary>
+        public Func<int> Coins;
+        private bool _busy;
+
+        private int Treasury => Coins?.Invoke() ?? _state.Coins;
         /// <summary>Shu shaharga kelayotgan dushman haqida matn (yo'q bo'lsa null) — HUD'da qizil ogohlantirish.</summary>
         public Func<string> ThreatText;
 
@@ -169,14 +179,34 @@ namespace AndijonSaltanatlar.World
         /// <summary>Himoyani bir daraja oshiradi: avval saqlanadi, keyin tanga yechiladi (saqlash rad etilsa — tanga yo'qolmaydi).</summary>
         public void TryFortify()
         {
-            if (!Active) return;
+            if (!Active || _busy) return;
             if (Level >= LocalWorld.MaxFortify) { _state.ShowMessage("Qal'a eng yuqori darajada (" + LocalWorld.MaxFortify + "/" + LocalWorld.MaxFortify + ")"); return; }
             int cost = LocalWorld.FortifyCost(Level);
-            if (_state.Coins < cost) { _state.ShowMessage("Kuchaytirish uchun " + cost + " tanga kerak (sizda " + _state.Coins + ")", true); return; }
-            int nl = FortifyCommit?.Invoke(RegionId) ?? -1;
-            if (nl <= Level) { _state.ShowMessage("Bu qasrni hozir kuchaytirib bo'lmaydi", true); return; }
+            if (Treasury < cost) { _state.ShowMessage("Kuchaytirish uchun " + cost + " tanga kerak (sizda " + Treasury + ")", true); return; }
+            if (RequestFortify != null)
+            {
+                // Onlayn: server tekshiradi va tangani yechadi; javob kelguncha tugma band
+                _busy = true;
+                int was = Level, region = RegionId;
+                RequestFortify(region, nl =>
+                {
+                    _busy = false;
+                    if (!Active || RegionId != region) return;
+                    if (nl == -2) { _state.ShowMessage("Server band yoki ulanmagan - birozdan so'ng qayta bosing", true); return; }
+                    if (nl <= was) { _state.ShowMessage("Server kuchaytirishni rad etdi", true); return; }
+                    Fortified(nl, cost);
+                });
+                return;
+            }
+            int lvl = FortifyCommit?.Invoke(RegionId) ?? -1;
+            if (lvl <= Level) { _state.ShowMessage("Bu qasrni hozir kuchaytirib bo'lmaydi", true); return; }
             _state.Coins -= cost;
-            Level = nl;
+            Fortified(lvl, cost);
+        }
+
+        private void Fortified(int level, int cost)
+        {
+            Level = level;
             ApplyFortify(_buildings.Buildings, Level);
             ShowBanner("HIMOYA KUCHAYDI!  Daraja " + Level + "/" + LocalWorld.MaxFortify, 2.5f);
             _state.ShowMessage(RegionName + ": devor, darvoza va minoralar mustahkamlandi (-" + cost + " tanga)");
@@ -217,7 +247,7 @@ namespace AndijonSaltanatlar.World
             int max = LocalWorld.MaxFortify;
 
             // --- Yuqori: shahar, himoya darajasi, xazina ---
-            string top = "SHAHAR: " + RegionName + " | Himoya darajasi: " + Level + "/" + max + " | Xazina: " + _state.Coins + " tanga";
+            string top = "SHAHAR: " + RegionName + " | Himoya darajasi: " + Level + "/" + max + " | Xazina: " + Treasury + " tanga";
             string sub = Level >= max
                 ? "Qal'a eng mustahkam holatda - dushman hujumini doim qaytaradi"
                 : "Devor, darvoza va minoralarni kuchaytiring - dushman hujumida himoya oshadi";
@@ -258,8 +288,8 @@ namespace AndijonSaltanatlar.World
             _buttons.Clear();
             bool full = Level >= max;
             int cost = LocalWorld.FortifyCost(Level);
-            bool afford = _state.Coins >= cost;
-            string fl = full ? "HIMOYA TO'LIQ (" + max + "/" + max + ")" : "KUCHAYTIRISH (" + cost + " tanga)";
+            bool afford = Treasury >= cost;
+            string fl = full ? "HIMOYA TO'LIQ (" + max + "/" + max + ")" : _busy ? "SERVERGA YUBORILDI..." : "KUCHAYTIRISH (" + cost + " tanga)";
             const string bl = "XARITAGA QAYTISH";
             int bh = 34 * k, gap = 10 * k;
             int W(string t) => (int)_font.Measure(t, s).X + 28 * k;
