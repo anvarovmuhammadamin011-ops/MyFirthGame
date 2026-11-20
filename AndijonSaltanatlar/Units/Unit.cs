@@ -59,6 +59,118 @@ namespace AndijonSaltanatlar.Units
         public Texture2D[] BackWorkFrames { get; set; }
         /// <summary>Unit joyida ishlayapti (dehqon yer chopyapti) — ish kadrlari aylanadi.</summary>
         public bool Working { get; set; }
+        /// <summary>
+        /// Kasbga xos ish harakati (Population.WorkStyle raqami; 0 — yo'q). Ish kadrlari bo'lmagan kasblar uchun renderer
+        /// tana pozasini shu bo'yicha qimirlatadi: bolg'a urish, qazish, yozish, savdo, baliq tutish, egilish.
+        /// </summary>
+        public int WorkStyle { get; set; }
+        /// <summary>Ish harakati vaqti (soniya) — poza ritmi uchun.</summary>
+        public float WorkTime { get; set; }
+
+        // --- Hayot pozalari (ish, bayram, buyruq, mag'lubiyat) ---
+        public const int ActionNone = 0, ActionCelebrate = 1, ActionSalute = 2, ActionDefeat = 3;
+        /// <summary>Hozirgi hayot harakati (ActionCelebrate/Salute/Defeat) va qolgan vaqti.</summary>
+        public int LifeAction { get; private set; }
+        public float LifeActionTime { get; private set; }
+        private float _lifeActionTotal;
+
+        /// <summary>Qisqa harakatni boshlaydi: bayram (sakrash), buyruq olish (ta'zim), mag'lubiyat (bosh egib turish).</summary>
+        public void PlayAction(int action, float seconds)
+        {
+            LifeAction = action;
+            LifeActionTime = _lifeActionTotal = MathF.Max(0.1f, seconds);
+        }
+
+        /// <summary>Ko'rinish (0..1): binoga kirishda asta yo'qoladi, chiqishda asta paydo bo'ladi.</summary>
+        public float Presence { get; set; } = 1f;
+
+        /// <summary>Haqiqiy harakat tezligi (tile/s, silliqlangan) — yugurish pozasi uchun.</summary>
+        public float MoveSpeed { get; private set; }
+        /// <summary>Yugurayapti (tez yurish): tana oldinga engashadi, qadam kattaroq.</summary>
+        public bool IsRunning => IsStepping && MoveSpeed > 2.1f;
+
+        /// <summary>
+        /// Hayot pozasi: kasbga xos ish harakati (to'xtab turganda) va bayram/buyruq/mag'lubiyat. Zarba paytida — yo'q
+        /// (zarba pozasi ustun). Renderer zarba pozasiga qo'shadi: siljish, og'ish va vertikal masshtab.
+        /// </summary>
+        public void GetLifePose(out Vector2 offset, out float rotation, out float scaleY)
+        {
+            offset = Vector2.Zero; rotation = 0f; scaleY = 1f;
+            if (AttackTimer > 0f || IsDown) return;
+            float side = Flipped ? -1f : 1f;
+            if (LifeAction != ActionNone && LifeActionTime > 0f)
+            {
+                float u = 1f - LifeActionTime / _lifeActionTotal;   // 0..1
+                switch (LifeAction)
+                {
+                    case ActionCelebrate:   // sakrab-sakrab xursandchilik
+                        offset = new Vector2(0, -MathF.Abs(MathF.Sin(u * _lifeActionTotal * 7f + PerEntityPhaseOffset)) * 5f);
+                        rotation = 0.06f * MathF.Sin(u * _lifeActionTotal * 9f) * side;
+                        break;
+                    case ActionSalute:      // buyruqni qabul qilish: qisqa ta'zim
+                    {
+                        float k = MathF.Sin(MathF.Min(1f, u * 1.4f) * MathF.PI);
+                        rotation = 0.16f * k * side;
+                        offset = new Vector2(0, 1.5f * k);
+                        break;
+                    }
+                    case ActionDefeat:      // mag'lubiyat: bosh egilgan, cho'kkan
+                        rotation = 0.2f * side;
+                        scaleY = 0.88f;
+                        offset = new Vector2(0, 2.5f);
+                        break;
+                }
+                offset = new Vector2(MathF.Round(offset.X), MathF.Round(offset.Y));
+                return;
+            }
+            if (IsRunning)
+            {
+                rotation = 0.07f * side;   // yugurishda oldinga engashadi
+                return;
+            }
+            if (WorkStyle == 0 || IsStepping) return;
+            float t = WorkTime + PerEntityPhaseOffset;
+            switch (WorkStyle)
+            {
+                case 1: // bolg'a: ko'tarib, keskin urish
+                {
+                    float p = t / 0.7f % 1f;
+                    if (p < 0.6f) { float k = p / 0.6f; offset = new Vector2(0, -1.2f * k); rotation = -0.06f * k * side; }
+                    else { float k = (p - 0.6f) / 0.4f; offset = FacingWorld * 2f * (1f - k) + new Vector2(0, 1f); rotation = 0.1f * (1f - k) * side; scaleY = 0.96f; }
+                    break;
+                }
+                case 2: // qazish: chuqur egilib cho'kich urish
+                {
+                    float p = t / 1.1f % 1f;
+                    float k = p < 0.55f ? p / 0.55f : 1f - (p - 0.55f) / 0.45f;
+                    rotation = 0.2f * k * side;
+                    scaleY = 1f - 0.1f * k;
+                    offset = new Vector2(0, 2.5f * k);
+                    break;
+                }
+                case 3: // yozish/o'qish: sekin bosh qimirlatish
+                    rotation = 0.035f * MathF.Sin(t * 2.6f) * side + 0.04f * side;
+                    scaleY = 1f - 0.015f * (1f + MathF.Sin(t * 2.6f));
+                    break;
+                case 4: // savdo: gaplashib, yonga chayqalish
+                    rotation = 0.05f * MathF.Sin(t * 3.9f);
+                    offset = new Vector2(MathF.Sin(t * 3.9f) * 1f, 0);
+                    break;
+                case 5: // baliq: suvga engashgan, ba'zan qarmoqni tortadi
+                {
+                    float p = t / 3.2f % 1f;
+                    rotation = (p > 0.85f ? -0.06f : 0.12f) * side;
+                    offset = new Vector2(0, p > 0.85f ? -1.5f : 0.5f);
+                    break;
+                }
+                case 6: // egilish (o't terish, hayvon parvarishi)
+                    rotation = 0.12f * side;
+                    scaleY = 0.9f + 0.03f * MathF.Sin(t * 2f);
+                    offset = new Vector2(0, 2f);
+                    break;
+            }
+            offset = new Vector2(MathF.Round(offset.X), MathF.Round(offset.Y));
+        }
         /// <summary>Yelkada ko'tarib yurgan narsa rasmi kaliti (masalan "carry_sack" — hosil qopi). null — hech narsa.</summary>
         public string CarryKey { get; set; }
         /// <summary>Sug'oryapti — ekin ustiga suv tomchilari tushadi.</summary>
@@ -452,6 +564,8 @@ namespace AndijonSaltanatlar.Units
             if (FlashTimer > 0f) FlashTimer = MathF.Max(0f, FlashTimer - dt);
             if (HitReactTimer > 0f) HitReactTimer = MathF.Max(0f, HitReactTimer - dt);
             if (IsDown) DownTime += dt; else { DownTime = 0f; FadeAlpha = 1f; }
+            if (WorkStyle != 0) WorkTime += dt;
+            if (LifeActionTime > 0f) { LifeActionTime = MathF.Max(0f, LifeActionTime - dt); if (LifeActionTime <= 0f) LifeAction = ActionNone; }
 
             // 1) Xatti-harakatni yangilash (suhbatda — joyida turadi; yiqilgan — qimirlamaydi;
             //    tashqi boshqaruvda — harakatni Combat tizimi beradi)
@@ -539,6 +653,7 @@ namespace AndijonSaltanatlar.Units
             if (moved < 1f) _walkDist += moved;
             if (moved > 0.0005f && moved < 1f) _sinceStep = 0f;
             else _sinceStep += dt;
+            if (dt > 0f && moved < 1f) MoveSpeed += (moved / dt - MoveSpeed) * MathF.Min(1f, dt * 8f);   // silliqlangan tezlik
 
             if (Frames == null || Frames.Length == 0)
             {

@@ -38,7 +38,25 @@ namespace AndijonSaltanatlar.Core
         public void EndUpdate() { _update.Stop(); _updateMs = (float)_update.Elapsed.TotalMilliseconds; }
 
         public void BeginDraw() => _draw.Restart();
-        public void EndDraw() { _draw.Stop(); _drawMs = (float)_draw.Elapsed.TotalMilliseconds; }
+        public void EndDraw()
+        {
+            _draw.Stop();
+            _drawMs = (float)_draw.Elapsed.TotalMilliseconds;
+            // Sessiya statistikasi (sinov hisobot uchun): o'rtacha va eng yomon yangilash+chizish vaqti
+            float work = _updateMs + _drawMs;
+            _sumWork += work; _samples++;
+            if (work > _worstWork) _worstWork = work;
+        }
+
+        private double _sumWork;
+        private long _samples;
+        private float _worstWork;
+
+        /// <summary>Sinov hisobot: kadrlar soni, o'rtacha va eng yomon (yangilash + chizish) ms, ko'rinadigan spraytlar, NPC.</summary>
+        public string Summary() =>
+            "kadrlar=" + _samples + " ortacha_ms=" + (_samples > 0 ? (_sumWork / _samples).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "0")
+            + " eng_yomon_ms=" + _worstWork.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+            + " spraytlar=" + _visibleSprites + " npc=" + _activeNpcs + " xotira_mb=" + (GC.GetTotalMemory(false) / (1024 * 1024));
 
         public void SetVisibleSprites(int n) => _visibleSprites = n;
         public void SetActiveNpcs(int n) => _activeNpcs = n;

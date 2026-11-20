@@ -23,6 +23,10 @@ namespace AndijonSaltanatlar.Buildings
             BuildingType.Madrasa => new[] { "Maktab", "Madrasa", "Katta madrasa", "Oliy madrasa", "Dorul-ilm" },
             BuildingType.Mosque => new[] { "Namozgoh", "Masjid", "Jome masjid", "Katta masjid", "Saltanat masjidi" },
             BuildingType.GladiatorArena => new[] { "Maydon", "Kurash maydoni", "Arena", "Katta arena", "Saltanat arenasi" },
+            BuildingType.Workshop => new[] { "Do'kon-ustaxona", "Ustaxona", "Katta ustaxona", "Hunarmandlar rastasi", "Saltanat ustaxonasi" },
+            BuildingType.Mine => new[] { "Qazilma", "Kon", "Chuqur kon", "Katta kon", "Saltanat koni" },
+            BuildingType.Fishery => new[] { "Baliqchi kulbasi", "Baliqxona", "Katta baliqxona", "Baliq bozori", "Saltanat baliqxonasi" },
+            BuildingType.Clinic => new[] { "Tabibxona", "Shifoxona", "Dorushshifo", "Katta dorushshifo", "Saltanat dorushshifosi" },
             _ => new[] { "Oddiy", "Bezatilgan", "Boy", "Hashamatli", "Saltanat" },
         };
 
@@ -71,6 +75,9 @@ namespace AndijonSaltanatlar.Buildings
             BuildingType.Caravanserai => 0.5f,
             BuildingType.Farm => 0.5f,
             BuildingType.Garden => 0.4f,
+            BuildingType.Workshop => 0.5f,
+            BuildingType.Mine => 0.5f,
+            BuildingType.Fishery => 0.4f,
             _ => 0f,
         };
 
@@ -94,6 +101,10 @@ namespace AndijonSaltanatlar.Buildings
             BuildingType.Madrasa => "ilm va texnologiya tezligi",
             BuildingType.MainHall => "soliq daromadi va qo'riqchilar",
             BuildingType.GladiatorArena => "tomosha daromadi va gladiatorlar kuchi",
+            BuildingType.Workshop => "hunarmandlar soni va buyumlar savdosi",
+            BuildingType.Mine => "konchilar soni va ma'dan hajmi",
+            BuildingType.Fishery => "baliqchilar soni va ovi",
+            BuildingType.Clinic => "tabiblar soni va aholi sog'lig'i",
             _ => "mustahkamlik va sig'im",
         };
     }

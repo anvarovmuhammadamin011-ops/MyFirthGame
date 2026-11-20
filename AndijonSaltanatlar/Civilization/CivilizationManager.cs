@@ -43,13 +43,14 @@ namespace AndijonSaltanatlar.Civilization
         public int AITechCount(int kingdomId) => _ai.TryGetValue(kingdomId, out int[] a) ? a[1] : 0;
 
         /// <summary>O'yinchi shahrining bir kunlik ilm va madaniyat ishlab chiqarishi + tadqiqot progressi.</summary>
-        public string DailyTick(BuildingManager buildings, float eduAvg)
+        public string DailyTick(BuildingManager buildings, float eduAvg, int scholars = 0)
         {
             CivilizationModifiers mod = Player.Modifiers();
             float resBonus = mod.Get(TechEffectType.ResearchProductionBonus);
             float cultBonus = mod.Get(TechEffectType.CulturalInfluenceBonus);
 
-            int science = (int)((1 + buildings.Count(BuildingType.Madrasa) * 5 + (int)(eduAvg / 20f)) * (1f + resBonus));
+            // Olimlar (madrasadagi falakiyotchi va riyoziyotchilar) har biri kuniga +2 ilm beradi
+            int science = (int)((1 + buildings.Count(BuildingType.Madrasa) * 5 + (int)(eduAvg / 20f) + scholars * 2) * (1f + resBonus));
             LastSciencePerDay = science;
 
             LastCulturePerDay = CultureManager.DailyCulture(buildings, cultBonus);

@@ -48,6 +48,8 @@ namespace AndijonSaltanatlar.Economy
         public int LastProdTax { get; private set; }
         public int LastRetailTax { get; private set; }
         public int LastTradeVolume { get; private set; }
+        /// <summary>Hunarmandlar va konchilar savdoga chiqargan mahsulot hajmi.</summary>
+        public int LastGoodsVolume { get; private set; }
 
         public EconomyManager(ResourceManager res)
         {
@@ -71,6 +73,24 @@ namespace AndijonSaltanatlar.Economy
         public static int ComputeExpense(int soldiers, int officials, int population)
             => soldiers * SoldierWage + officials * OfficialWage + ComputeSocialExpense(population);
 
+        /// <summary>Ustoz, olim va tabiblar maoshi (davlat hisobidan, kishi boshiga kuniga 1 tanga).</summary>
+        public const int ScholarWage = 1;
+
+        /// <summary>Chorvador (sut, go'sht) va baliqchilarning kunlik oziq-ovqati.</summary>
+        public static int ComputeExtraFood(int herders, int fishers) => herders * 4 + fishers * 4;
+
+        /// <summary>Omborchilar zaxirani isrofsiz saqlaydi: har biri +5% (eng ko'pi +25%).</summary>
+        public static float StorageBonus(int storekeepers) => 0.05f * System.Math.Min(5, storekeepers);
+
+        /// <summary>Hunarmand buyumlari va konchilar ma'dani savdoga chiqadi.</summary>
+        public static int ComputeGoodsVolume(int craftsmen, int miners) => craftsmen * 5 + miners * 4;
+
+        /// <summary>Bozor egalari savdo infratuzilmasini rivojlantiradi: har biri +8% (eng ko'pi +40%).</summary>
+        public static float MarketBonus(int bazaarOwners) => 0.08f * System.Math.Min(5, bazaarOwners);
+
+        /// <summary>Soliq yig'uvchilar tushumni to'liqroq undiradi: har biri +6% (eng ko'pi +30%).</summary>
+        public static float TaxCollectorBonus(int collectors) => 0.06f * System.Math.Min(5, collectors);
+
         public void DailyTick(BuildingManager b, PopulationManager pop, GovernmentPolicy policy,
                               float foodBonus, float tradeBonus, float taxBonus, RetailDayResult retail = null)
         {
@@ -78,7 +98,10 @@ namespace AndijonSaltanatlar.Economy
             int farmers = pop.CountProfession(CitizenProfession.Bogbon) + pop.CountProfession(CitizenProfession.Dehqon);
             int traders = pop.CountProfession(CitizenProfession.Savdogar) + pop.CountProfession(CitizenProfession.Tashuvchi);
             int soldiers = pop.CountProfession(CitizenProfession.Soqchi);
-            int officials = pop.CountProfession(CitizenProfession.Amaldor);
+            int officials = pop.CountProfession(CitizenProfession.Amaldor) + pop.CountProfession(CitizenProfession.SoliqYiguvchi)
+                          + pop.CountProfession(CitizenProfession.Memor);
+            int scholars = pop.CountProfession(CitizenProfession.Muallim) + pop.CountProfession(CitizenProfession.Olim)
+                         + pop.CountProfession(CitizenProfession.Tabib);
 
             // --- Oziq-ovqat ---
             int foodProduced, foodConsumed;
@@ -91,6 +114,8 @@ namespace AndijonSaltanatlar.Economy
             else
             {
                 foodProduced = ComputeFoodProduction(farmers, (int)b.UpgradePower(BuildingType.Garden), (int)b.UpgradePower(BuildingType.Farm), foodBonus);
+                foodProduced += ComputeExtraFood(pop.CountProfession(CitizenProfession.Chorvador), pop.CountProfession(CitizenProfession.Baliqchi));
+                foodProduced = (int)(foodProduced * (1f + StorageBonus(pop.CountProfession(CitizenProfession.Omborchi))));
                 foodConsumed = population;
                 _res.Add(ResourceType.Food, foodProduced - foodConsumed);
             }
@@ -98,7 +123,10 @@ namespace AndijonSaltanatlar.Economy
             LastFoodConsumed = foodConsumed;
 
             // --- Tashqi (davlat darajasidagi) savdo hajmi va umumiy ishlab chiqarish ---
-            int tradeVolume = (int)((traders * 8 + b.UpgradePower(BuildingType.Market) * 6 + b.UpgradePower(BuildingType.Caravanserai) * 5) * (1f + tradeBonus));
+            int goods = ComputeGoodsVolume(pop.CountProfession(CitizenProfession.Hunarmand), pop.CountProfession(CitizenProfession.Konchi));
+            LastGoodsVolume = goods;
+            int tradeVolume = (int)((traders * 8 + goods + b.UpgradePower(BuildingType.Market) * 6 + b.UpgradePower(BuildingType.Caravanserai) * 5)
+                                    * (1f + tradeBonus + MarketBonus(pop.CountProfession(CitizenProfession.BozorEgasi))));
             LastTradeVolume = tradeVolume;
             LastProduction = foodProduced + tradeVolume;
 
@@ -113,8 +141,9 @@ namespace AndijonSaltanatlar.Economy
             LastProdTax = prodTax;
             LastRetailTax = retailTax;
 
-            int income = (int)((popTax + tradeTax + prodTax + tradeVolume / 3) * (1f + taxBonus)) + retailTax;
-            int expense = ComputeExpense(soldiers, officials, population);
+            float collect = 1f + TaxCollectorBonus(pop.CountProfession(CitizenProfession.SoliqYiguvchi));
+            int income = (int)(((popTax + tradeTax + prodTax) * collect + tradeVolume / 3) * (1f + taxBonus)) + retailTax;
+            int expense = ComputeExpense(soldiers, officials, population) + scholars * ScholarWage;
 
             LastIncome = income;
             LastExpense = expense;

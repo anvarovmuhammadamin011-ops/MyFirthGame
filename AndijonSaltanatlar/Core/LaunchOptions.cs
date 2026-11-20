@@ -156,6 +156,10 @@ public sealed class LaunchOptions
 
 	/// <summary>Sinov: shahar markazida barcha kasb va askar ko'rinishlari qatori (--lineup).</summary>
 	public bool Lineup;
+	/// <summary>Sinov: shu binolarni tayyor holda qurish (--place workshop,mine,fishery,clinic).</summary>
+	public string Place;
+	/// <summary>Profiler (F3) boshidan yoqilgan — unumdorlikni skrinshotda o'lchash uchun (--perf).</summary>
+	public bool Perf;
 
 	/// <summary>Sinov (serversiz): shu qasringizga AI hujumini darhol boshlash (--ai-attack Asaka).</summary>
 	public string AiAttack;
@@ -360,6 +364,13 @@ public sealed class LaunchOptions
 				break;
 			case "--lineup":
 				launchOptions.Lineup = true;
+				break;
+			case "--perf":
+				launchOptions.Perf = true;
+				break;
+			case "--place":
+				launchOptions.Place = text;
+				i++;
 				break;
 			case "--ai-attack":
 				launchOptions.AiAttack = text;

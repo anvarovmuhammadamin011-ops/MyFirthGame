@@ -27,6 +27,10 @@ namespace AndijonSaltanatlar.Buildings
                 case BuildingType.Madrasa: b = new Madrasa(position); break;
                 case BuildingType.Mosque: b = new Mosque(position); break;
                 case BuildingType.Caravanserai: b = new Caravanserai(position); break;
+                case BuildingType.Workshop: b = new Workshop(position); break;
+                case BuildingType.Mine: b = new Mine(position); break;
+                case BuildingType.Fishery: b = new Fishery(position); break;
+                case BuildingType.Clinic: b = new Clinic(position); break;
                 default: throw new ArgumentOutOfRangeException(nameof(type));
             }
             b.Variant = variant;

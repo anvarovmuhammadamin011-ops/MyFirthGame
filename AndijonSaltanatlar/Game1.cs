@@ -124,6 +124,8 @@ public sealed class Game1 : Game
 	/// <summary>Yurish boshlanganda shahardan qo'shin chiqib ketishi (ko'rinish).</summary>
 	private readonly MarchOutParade _parade = new MarchOutParade();
 	private readonly FarmWorkController _farmWork = new FarmWorkController();
+	/// <summary>Kasb egalari ish joylarida (hunarmand, konchi, baliqchi, savdogar, olim ...) va qo'shinxona mashg'uloti.</summary>
+	private readonly WorkplaceLifeController _workLife = new WorkplaceLifeController();
 	private readonly SwimController _swim = new SwimController();
 
 	private bool _strategicMode;
@@ -283,7 +285,7 @@ public sealed class Game1 : Game
 		_online = new AndijonSaltanatlar.Online.OnlineClient();
 		// PROMPT 19B: yagona dizayn tizimi (ThemeManager + Typography/Noto Sans + UiKit komponentlari)
 		_uiKit = new AndijonSaltanatlar.UI.Design.UiKit(_assets.Pixel, new AndijonSaltanatlar.UI.Design.Typography(_font));
-		_perf = new Core.PerformanceMonitor();
+		_perf = new Core.PerformanceMonitor { Enabled = _opt.Perf };
 		_onlinePanel = new OnlinePanel(_assets, _font, _online, _uiKit);
 		_onlinePanel.LocalArmyCount = () => _state?.Military?.TotalUnits ?? 0;
 		_onlinePanel.SiegeDeparted = target => StartMarchOutParade(target.Name);
@@ -1831,6 +1833,11 @@ public sealed class Game1 : Game
 			_lineupDone = true;
 			SpawnLineup();
 		}
+		if (_opt.Place != null && !_placeDone && !_loginMode && !_menuMode && !_introMode && _buildings != null)
+		{
+			_placeDone = true;
+			PlaceTestBuildings(_opt.Place);
+		}
 		if (_opt.MarchOut != null && !_paradeTestDone && !_loginMode && !_menuMode && !_introMode && _state.Military != null)
 		{
 			_paradeTestDone = true;
@@ -2181,6 +2188,7 @@ public sealed class Game1 : Game
 		_units.Update(dt * (_combat?.TimeScale ?? 1f));
 		UpdateMilitaryRanks(dt);
 		_farmWork.Update(dt, _map, _buildings, _units, _state);
+		_workLife.Update(dt, _map, _buildings, _units, _state);
 		_units.ApplyPhysics(_map, _combat.Possessed, dt);
 		_combat.UnrestHigh = _taxRiot != null && _taxRiot.Active;
 		_swim.Force = _opt.Swim;
@@ -2190,7 +2198,7 @@ public sealed class Game1 : Game
 			if (_swim.FirstInWater is Unit swimmer) _camera.Jump(IsoMath.TileToWorld(swimmer.Position) + new Vector2(0, 60), 2.6f);
 			_state.ShowMessage(_swim.Debug);
 		}
-		_swim.Update(dt, _map, _units, _state, _combat.Possessed, u => _farmWork.IsWorker(u));
+		_swim.Update(dt, _map, _units, _state, _combat.Possessed, u => _farmWork.IsWorker(u) || _workLife.IsWorker(u));
 		// Uyga kirmagan paytda oilalar o'zlari non yopadi
 		if (!_state.Paused) AndijonSaltanatlar.Interiors.HouseInterior.TickOutside(dt * _state.Speed / Math.Max(1f, _state.Clock.SecondsPerDay) * 24f);
 		_renderer.Tick(dt);
@@ -2204,7 +2212,7 @@ public sealed class Game1 : Game
 			if (!_parade.CameraReleased && _combat.Possessed == null && _parade.Focus(out Vector2 pf))
 				_camera.Follow(IsoMath.TileToWorld(pf) + new Vector2(0f, -20f), num, 3f);
 		}
-		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
+		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_workLife?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
 		_citizenSocial.Update(_units, dt);
 		_citizenLife?.Update(dt, _map, _buildings, _units, _state, _combat.Possessed);
 		_taxRiot?.SetEscortShield(_combat.EscortCount);
@@ -2280,6 +2288,39 @@ public sealed class Game1 : Game
 	}
 
 	/// <summary>Fasl almashganda xabar (o'yin boshida emas — faqat almashuvda).</summary>
+	// ------------------------------------------------------------------ SINOV: binolarni tayyor holda joylash (--place workshop,mine,...)
+	private bool _placeDone;
+
+	/// <summary>Sinov: berilgan binolarni bo'sh joyga quradi (darhol bitkazadi), aholini to'ldiradi va ishga joylaydi.</summary>
+	private void PlaceTestBuildings(string list)
+	{
+		_state.Coins = Math.Max(_state.Coins, 20000);
+		foreach (string tech in new[] { "hunarmandchilik", "tibbiyot", "karvon-savdosi", "me'morchilik", "shaharsozlik" })
+			_state.Civ.Player.Researched.Add(tech);
+		Building last = null;
+		int placed = 0;
+		foreach (string raw in list.Split(','))
+		{
+			if (!Enum.TryParse(raw.Trim(), true, out BuildingType type)) continue;
+			int size = BuildingFactory.Create(type, Point.Zero).Size.X;
+			Point? at = FindBuildableTile(size, -1);
+			if (!at.HasValue) continue;
+			int before = _buildings.Buildings.Count;
+			_state.EnterBuildMode(type);
+			bool ok = _construction.PlaceAtOrigin(at.Value, showErrors: false);
+			_state.CancelBuild();
+			if (!ok || _buildings.Buildings.Count == before) continue;
+			last = _buildings.Buildings[_buildings.Buildings.Count - 1];
+			last.BuildProgress = 1f;
+			placed++;
+		}
+		_state.ShowMessage("Sinov: " + placed + " ta bino qurildi");
+		_state.Pop.FillToCapacity(_buildings);
+		_state.Pop.AssignJobs(_buildings);
+		if (last != null && !_opt.CenterTile.HasValue)
+			_camera.Jump(IsoMath.TileToWorld(new Vector2(last.FrontEntranceTile.X, last.FrontEntranceTile.Y)), _opt.Zoom ?? 1.6f);
+	}
+
 	// ------------------------------------------------------------------ SINOV: barcha kasb va askarlar qatori (--lineup)
 	private bool _lineupDone;
 
@@ -2365,6 +2406,7 @@ public sealed class Game1 : Game
 				break;
 			}
 			case AndijonSaltanatlar.Online.AttackEventKind.Held:
+				CelebrateCity(4f);
 				_state.ShowMessage("G'alaba! " + e.Target + " qasri himoya qilindi - " + e.Attacker + " qo'shini chekindi.");
 				_state.ShowVizier("Qasr himoya qilindi!", "Hazratim, " + e.Target + " devorlari mustahkam chiqdi (himoya " + e.Fortify + "/" + max + "). "
 					+ e.Attacker + " qo'shini yengilib chekindi!");
@@ -2416,12 +2458,22 @@ public sealed class Game1 : Game
 		if (first) return;
 		string text = season switch
 		{
-			Season.Bahor => "BAHOR keldi! O'riklar gulladi, laylaklar qaytdi. Chorva tez ko'payadi.",
+			Season.Bahor => "NAVRO'Z MUBORAK! Bahor keldi, o'riklar gulladi, laylaklar qaytdi. Shahar bayram qilmoqda!",
 			Season.Yoz => "YOZ keldi! Jazirama issiq, ariqlar sayozlashadi.",
 			Season.Kuz => "KUZ keldi! Hosil pishdi, barglar sarg'aydi.",
 			_ => "QISH keldi! Qor yog'di, ariqlar muzladi. Laylaklar issiq o'lkalarga uchib ketdi."
 		};
 		_state.ShowMessage(text);
+		if (season == Season.Bahor) CelebrateCity(6f);   // Navro'z bayrami
+	}
+
+	/// <summary>Shahar ahli bayram qiladi (sakrab xursandchilik): Navro'z, g'alaba, qasr himoyasi.</summary>
+	private void CelebrateCity(float seconds)
+	{
+		if (_units == null) return;
+		foreach (Unit u in _units.Units)
+			if (!u.IsDown && !u.Hidden && u.Team == UnitTeam.Player && !u.ExternallyControlled)
+				u.PlayAction(Unit.ActionCelebrate, seconds * (0.8f + 0.1f * (u.Id % 5)));
 	}
 
 	private void ApplySeasonWeather(Season season)
@@ -2907,6 +2959,7 @@ public sealed class Game1 : Game
 				}
 				using FileStream stream = File.Create(_opt.ScreenshotPath);
 				renderTarget2D.SaveAsPng(stream, renderTarget2D.Width, renderTarget2D.Height);
+				if (_opt.Perf && _perf != null) File.WriteAllText(Path.ChangeExtension(_opt.ScreenshotPath, ".perf.txt"), _perf.Summary() + " birliklar=" + _units.Units.Count);
 			}
 			catch (Exception)
 			{

@@ -26,6 +26,10 @@ namespace AndijonSaltanatlar.Core
         public const string Madrasa = "building_madrasa";
         public const string Mosque = "building_mosque";
         public const string Caravanserai = "building_caravanserai";
+        public const string Workshop = "building_workshop";
+        public const string Mine = "building_mine";
+        public const string Fishery = "building_fishery";
+        public const string Clinic = "building_clinic";
 
         public const string TreePoplar = "decor_tree_poplar";
         public const string TreeChinor = "decor_tree_chinor";
@@ -138,6 +142,15 @@ namespace AndijonSaltanatlar.Core
             RegisterLevels(SpriteKeys.Madrasa, 4, _ => BuildingArt.Madrasa());
             RegisterLevels(SpriteKeys.Mosque, 4, _ => BuildingArt.Mosque());
             RegisterLevels(SpriteKeys.Caravanserai, 4, _ => BuildingArt.Caravanserai());
+            // Kasblar uchun yangi binolar (kod bilan chizilgan — boshqa binolar uslubida)
+            Register(SpriteKeys.Workshop, BuildingArt.Workshop);
+            Register(SpriteKeys.Mine, BuildingArt.Mine);
+            Register(SpriteKeys.Fishery, BuildingArt.Fishery);
+            Register(SpriteKeys.Clinic, BuildingArt.Clinic);
+            RegisterLevels(SpriteKeys.Workshop, 3, _ => BuildingArt.Workshop());
+            RegisterLevels(SpriteKeys.Mine, 3, _ => BuildingArt.Mine());
+            RegisterLevels(SpriteKeys.Fishery, 3, _ => BuildingArt.Fishery());
+            RegisterLevels(SpriteKeys.Clinic, 3, _ => BuildingArt.Clinic());
 
             Register(SpriteKeys.TreePoplar, () => DecorArt.Tree(0));
             Register(SpriteKeys.TreeChinor, () => DecorArt.Tree(1));

@@ -551,6 +551,13 @@ namespace AndijonSaltanatlar.Combat
         {
             RaidActive = false;
             if (Possessed is RaiderUnit) Release(false);
+            // Shahar ahli: g'alabada xursandchilik, mag'lubiyatda askarlar bosh egib turadi
+            foreach (Unit u in _units.Units)
+                if (!u.IsDown && !u.Hidden && u.Team == UnitTeam.Player && !(u is RaiderUnit))
+                {
+                    if (victory) u.PlayAction(Unit.ActionCelebrate, 3.5f + (u.Id % 5) * 0.3f);
+                    else if (IsSoldier(u)) u.PlayAction(Unit.ActionDefeat, 5f);
+                }
 
             if (victory)
             {

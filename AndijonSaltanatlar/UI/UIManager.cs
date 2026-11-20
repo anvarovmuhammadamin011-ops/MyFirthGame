@@ -625,10 +625,10 @@ namespace AndijonSaltanatlar.UI
         private static int BuildCatOf(CatalogEntry e) => e.Type switch
         {
             BuildingType.House => 1,
-            BuildingType.Garden or BuildingType.Farm => 2,
-            BuildingType.Market or BuildingType.Caravanserai => 3,
+            BuildingType.Garden or BuildingType.Farm or BuildingType.Fishery => 2,
+            BuildingType.Market or BuildingType.Caravanserai or BuildingType.Workshop or BuildingType.Mine => 3,
             BuildingType.Barracks or BuildingType.GladiatorArena => 4,
-            BuildingType.Madrasa or BuildingType.Mosque => 5,
+            BuildingType.Madrasa or BuildingType.Mosque or BuildingType.Clinic => 5,
             BuildingType.MainHall => 6,
             BuildingType.Tower or BuildingType.Gate or BuildingType.Wall => 7,
             _ => 0

@@ -265,7 +265,12 @@ namespace AndijonSaltanatlar.Combat
         {
             if (!_groups.TryGetValue(key, out List<Unit> list) || _sent.Contains(key)) return;
             _sent.Add(key);
-            foreach (Unit u in list) if (!u.IsDown) _combat.EnlistAttacker(u);
+            foreach (Unit u in list)
+                if (!u.IsDown)
+                {
+                    u.PlayAction(Unit.ActionSalute, 0.6f);   // buyruqni qabul qiladi
+                    _combat.EnlistAttacker(u);
+                }
             _combat.SiegeAlert = true;
             if (_phase == Phase.Deploy) _phase = Phase.Assault;
             string label = GroupDefs.First(g => g.Key == key).Label;
@@ -484,6 +489,7 @@ namespace AndijonSaltanatlar.Combat
         {
             _phase = Phase.Captured;
             _endTimer = 4f;
+            foreach (Unit a in _attackers) if (!a.IsDown) a.PlayAction(Unit.ActionCelebrate, 4f);   // g'alaba bayrami
             string who = _defectors.Count > 0 ? "  " + _defectors.Count + " ta dushman askari tomoningizga o'tdi!" : "";
             ShowBanner("SHOH VA VAZIR YENGILDI! " + _t.RegionName.ToUpperInvariant() + " QASRI OLINDI!" + who, 4f);
             _state.ShowMessage("Saroy olindi! Qasrga bayrog'ingiz tikilmoqda...");
@@ -496,6 +502,7 @@ namespace AndijonSaltanatlar.Combat
             _phase = Phase.Defeated;
             _endTimer = 3f;
             if (_combat.Possessed != null) _combat.Release(false);
+            foreach (Unit a in _attackers) if (!a.IsDown) a.PlayAction(Unit.ActionDefeat, 3f);   // mag'lubiyat: bosh egib
             ShowBanner(why.ToUpperInvariant() + "  Qamal muvaffaqiyatsiz.", 4f);
         }
 

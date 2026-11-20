@@ -56,6 +56,10 @@ namespace AndijonSaltanatlar.CityPlanning
             BuildingType.Tower => "Minora",
             BuildingType.Gate => "Darvoza",
             BuildingType.MainHall => "Saroy",
+            BuildingType.Workshop => "Ustaxona",
+            BuildingType.Mine => "Kon",
+            BuildingType.Fishery => "Baliqxona",
+            BuildingType.Clinic => "Shifoxona",
             _ => Kind.ToString()
         };
 

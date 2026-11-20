@@ -342,6 +342,10 @@ public sealed class GameStateManager
 
 	public bool RecruitUnit(UnitType type) => RecruitUnits(type, 1, null);
 
+	/// <summary>Qurilish tezligi: har quruvchi +12% (eng ko'pi 6 kishi), har me'mor +20% (eng ko'pi 2 kishi).</summary>
+	public static float ConstructionSpeed(int builders, int architects) =>
+		1f + 0.12f * Math.Min(6, builders) + 0.2f * Math.Min(2, architects);
+
 	/// <summary>Navbatdagi (tayyorlanayotgan) jangchilar soni chegarasi — bir bosishda ko'p xarid xatosidan himoya.</summary>
 	public const int MaxRecruitQueue = 60;
 
@@ -462,14 +466,15 @@ public sealed class GameStateManager
 		Clock.Update(num);
 		// Jangchilar har o'yin SOATida tayyorlanadi (kun uzun — 60 daqiqa; TrainingDays = soat)
 		if (Clock.Hour != hour || Clock.Day != day) Military.DailyTick();
+		float buildSpeed = ConstructionSpeed(Pop.CountProfession(CitizenProfession.Quruvchi), Pop.CountProfession(CitizenProfession.Memor));
 		foreach (Building building in buildings.Buildings)
 		{
 			if (building.BuildProgress < 1f)
 			{
 				// Qurilish o'yin soatiga bog'liq (real sekundga emas): kun uzaysa qurilish ham
 				// mantiqiy ravishda uzoqroq davom etadi. 120 daqiqalik standart kunda avvalgi
-				// tezlik saqlanadi (soatiga 120 = 0.4/sek, 7200 sek/kunda).
-				building.BuildProgress = Math.Min(1f, building.BuildProgress + GameClock.GameHours(num, Clock.SecondsPerDay) * 120f);
+				// tezlik saqlanadi (soatiga 120 = 0.4/sek, 7200 sek/kunda). Quruvchi va me'morlar tezlashtiradi.
+				building.BuildProgress = Math.Min(1f, building.BuildProgress + GameClock.GameHours(num, Clock.SecondsPerDay) * 120f * buildSpeed);
 				if (building.BuildProgress >= 1f)
 				{
 					ShowMessage(building.Name + " qurilishi yakunlandi");
@@ -505,7 +510,7 @@ public sealed class GameStateManager
 		_economy.DailyTick(buildings, Pop, Policy, civilizationModifiers.Get(TechEffectType.FoodProductionBonus) + num2, civilizationModifiers.Get(TechEffectType.TradeIncomeBonus) + Weather.ProductionModifier() * 0.5f, civilizationModifiers.Get(TechEffectType.TaxEfficiencyBonus));
 		Pop.DailyTick(buildings, _resources, Policy, civilizationModifiers.Get(TechEffectType.PopulationHealthBonus), civilizationModifiers.Get(TechEffectType.EducationBonus), civilizationModifiers.Get(TechEffectType.CityStabilityBonus));
 		Life.DayTick(this, buildings);
-		string text = Civ.DailyTick(buildings, Pop.AvgEducation);
+		string text = Civ.DailyTick(buildings, Pop.AvgEducation, Pop.CountProfession(CitizenProfession.Olim));
 		if (text != null)
 		{
 			ShowMessage("Texnologiya ochildi: " + (TechnologyCatalog.Get(text)?.NameUz ?? text));

@@ -41,7 +41,10 @@ namespace AndijonSaltanatlar.World
         private static bool Visible(IWorldObject o, Vector4 view)
         {
             Vector2 p = o.DrawPosition;
-            return p.X + o.Texture.Width >= view.X && p.X <= view.Z && p.Y + o.Texture.Height >= view.Y && p.Y <= view.W;
+            // Odamlar 3D-render kadrlaridan (HR marta katta) — DrawPosition ham shu masshtabda; quti ham shunday bo'lsin
+            float s = o is Unit ? AssetManager.ScaleOf(o.Texture) : 1f;
+            const float M = 12f;   // zarba/sakrash pozasi uchun zaxira
+            return p.X + o.Texture.Width * s + M >= view.X && p.X - M <= view.Z && p.Y + o.Texture.Height * s + M >= view.Y && p.Y - M <= view.W;
         }
 
         /// <param name="extra">Qo'shimcha obyektlar (masalan, yerdagi qushlar) — binolar bilan birga saralanadi.</param>
@@ -54,6 +57,7 @@ namespace AndijonSaltanatlar.World
             foreach (var u in units.Units) if (!u.Hidden && Visible(u, view)) _buffer.Add(u);
             if (extra != null) foreach (var e in extra) if (Visible(e, view)) _buffer.Add(e);
             _buffer.Sort(Compare);
+            bool farView = view.Z - view.X > 1700f;   // kamera uzoqda: mayda yozuv va nishonlar chizilmaydi (LOD)
 
             foreach (var o in _buffer)
             {
@@ -91,7 +95,8 @@ namespace AndijonSaltanatlar.World
                     // Yurganda tananing yengil ko'tarilib-tushishi — oyoq kadrlari bilan BIR XIL fazada (bosib o'tilgan
                     // masofadan): har qadamda bir marta. Joyida tursa (yo'l to'silgan) — sakramaydi.
                     if (cu.IsStepping && !cu.IsDown)
-                        feet.Y -= MathF.Abs(MathF.Sin(cu.WalkPhase * MathF.PI * 2f)) * 1.3f;
+                        feet.Y -= MathF.Abs(MathF.Sin(cu.WalkPhase * MathF.PI * 2f)) * (cu.IsRunning ? 2.2f : 1.3f);   // yugurishda qadam balandroq
+                    if (cu.Presence <= 0.01f) continue;   // binoga to'liq kirib bo'lgan
                     // O'tirgan / ovqatlanayotgan fuqaro (bino oldidagi supada): gavda bukilgan — pastroq va qisqaroq,
                     // ovqatlanayotganda qo'l/bosh yengil qimirlaydi. Binoga kirgan mehmon — ichkarida, chizilmaydi.
                     float sitSquash = 1f;
@@ -113,7 +118,7 @@ namespace AndijonSaltanatlar.World
                     // Qamal: dushman jangchilari biroz qizg'ish (o'zimiznikidan ajralib turishi uchun)
                     if (cu.Team == UnitTeam.Enemy && !(cu is RaiderUnit) && !(cu is CitizenUnit)) tint = new Color(255, 196, 182);
                     if (cu.HurtTimer > 0f) tint = Color.Lerp(tint, new Color(255, 116, 104), MathHelper.Clamp(cu.HurtTimer / 0.3f, 0f, 1f));
-                    tint *= cu.FadeAlpha;
+                    tint *= cu.FadeAlpha * MathHelper.Clamp(cu.Presence, 0f, 1f);
                     if (cu.IsDown)
                     {
                         // Yiqilish: tezlashib qulaydi, yerga tushib biroz sakraydi, keyin xira yotadi
@@ -130,6 +135,9 @@ namespace AndijonSaltanatlar.World
                         // Zarba (kesish / chopish / sanchish / aylanma) va chayqalish: oyoq atrofida og'ish va siljish
                         cu.GetAttackPose(out Vector2 off, out float rot, out float sy, out bool spin);
                         cu.GetHitPose(out Vector2 hoff, out float hrot);
+                        // Hayot pozasi: kasbga xos ish harakati, yugurish, bayram, buyruq olish, mag'lubiyat
+                        cu.GetLifePose(out Vector2 loff, out float lrot, out float lsy);
+                        off += loff; rot += lrot; sy *= lsy;
                         if (spin) fx = fx == SpriteEffects.None ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
                         Vector2 at = new Vector2(MathF.Round(feet.X), MathF.Round(feet.Y)) + off + hoff;
                         int depth = map.WaterDepth((int)MathF.Floor(cu.Position.X), (int)MathF.Floor(cu.Position.Y));
@@ -194,10 +202,11 @@ namespace AndijonSaltanatlar.World
                     }
                     if (cu is CitizenUnit citizen && !cu.IsDown)
                     {
-                        if (citizen.Kind != Core.Graphics.CitizenArt.Citizen) DrawCitizenRole(sb, o, citizen);   // oddiy aholi boshida yozuv yo'q
+                        // LOD: uzoqdan (kichik masshtab) kasb yozuvi o'qilmaydi — chizilmaydi; gap pufagi doim ko'rinadi
+                        if (citizen.Kind != Core.Graphics.CitizenArt.Citizen && !farView) DrawCitizenRole(sb, o, citizen);   // oddiy aholi boshida yozuv yo'q
                         if (!string.IsNullOrEmpty(citizen.SpeechText)) DrawCitizenSpeech(sb, o, citizen);
                     }
-                    if (cu.CanRank && cu.Rank > 0 && !cu.IsDown) DrawRankBadge(sb, o, cu);   // pagon
+                    if (cu.CanRank && cu.Rank > 0 && !cu.IsDown && !farView) DrawRankBadge(sb, o, cu);   // pagon
                     continue;
                 }
 

@@ -112,6 +112,8 @@ namespace AndijonSaltanatlar.Units
 
         private readonly Dictionary<Unit, Vector2> _lastValid = new Dictionary<Unit, Vector2>();
         private readonly Dictionary<long, List<Unit>> _grid = new Dictionary<long, List<Unit>>();
+        /// <summary>Katak ro'yxatlari qayta ishlatiladi — har kadr yangi List ajratilmaydi (axlat yig'uvchiga yuk yo'q).</summary>
+        private readonly Stack<List<Unit>> _listPool = new Stack<List<Unit>>();
 
         /// <summary>
         /// Oddiy fizika: odamlar bir-birining ichidan o'tmaydi (yaqin kelsa yumshoq itarishadi) va bino devoridan o'tib
@@ -120,12 +122,19 @@ namespace AndijonSaltanatlar.Units
         public void ApplyPhysics(World.MapManager map, Unit possessed, float dt)
         {
             const float R = 0.32f;              // tana radiusi (tile)
+            foreach (var used in _grid.Values) { used.Clear(); _listPool.Push(used); }
             _grid.Clear();
+            // Olib tashlangan odamlarning "oxirgi joyi" yozuvlari to'planib qolmasin
+            if (_lastValid.Count > Units.Count * 2 + 16)
+            {
+                var alive = new HashSet<Unit>(Units);
+                foreach (Unit gone in new List<Unit>(_lastValid.Keys)) if (!alive.Contains(gone)) _lastValid.Remove(gone);
+            }
             foreach (Unit u in Units)
             {
                 if (u.IsDown || u.Hidden || (u is CitizenUnit c && c.IsInsideBuilding)) continue;
                 long key = ((long)(int)MathF.Floor(u.Position.X) << 32) ^ (uint)(int)MathF.Floor(u.Position.Y);
-                if (!_grid.TryGetValue(key, out var l)) _grid[key] = l = new List<Unit>(4);
+                if (!_grid.TryGetValue(key, out var l)) _grid[key] = l = _listPool.Count > 0 ? _listPool.Pop() : new List<Unit>(4);
                 l.Add(u);
             }
             foreach (Unit a in Units)

@@ -75,7 +75,12 @@ namespace AndijonSaltanatlar.NPC
                 case CitizenArt.Farmer: wanted = new[] { CitizenProfession.Dehqon, CitizenProfession.Bogbon }; break;
                 case CitizenArt.Craftsman: wanted = new[] { CitizenProfession.Tashuvchi, CitizenProfession.Muallim }; break;
                 case CitizenArt.Buyer: wanted = new[] { CitizenProfession.None }; break;
-                default: wanted = new[] { CitizenProfession.None, CitizenProfession.Amaldor, CitizenProfession.Muallim, CitizenProfession.Soqchi }; break;
+                case CitizenArt.Citizen: wanted = new[] { CitizenProfession.None, CitizenProfession.Amaldor, CitizenProfession.Muallim, CitizenProfession.Soqchi }; break;
+                default:
+                    // Kasb kiyimidagi figura (konchi, baliqchi, olim ...) — shu kasbdagi fuqaro
+                    CitizenProfession p0 = ProfessionLooks.ProfessionOf(kind);
+                    wanted = p0 == CitizenProfession.None ? new[] { CitizenProfession.None } : new[] { p0, CitizenProfession.None };
+                    break;
             }
             foreach (CitizenProfession p in wanted)
                 foreach (Citizen c in pop.Citizens)

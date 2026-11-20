@@ -7,6 +7,7 @@ using AndijonSaltanatlar.Defense;
 using AndijonSaltanatlar.Environment;
 using AndijonSaltanatlar.Government;
 using AndijonSaltanatlar.Military;
+using AndijonSaltanatlar.Population;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -311,6 +312,9 @@ namespace AndijonSaltanatlar.UI
         {
             var c = _diagContent;
             var pop = _state.Pop;
+            // Ehtiyojlar joriy holatdan (kun oxirini kutmasdan) — panel ochilganda ham to'g'ri ko'rinsin
+            pop.ComputeNeeds(_state.Food, _buildings.Count(BuildingType.Tower), _buildings.Count(BuildingType.Barracks),
+                             _buildings.Count(BuildingType.Clinic), _buildings.Count(BuildingType.Madrasa));
             int y = TileRow(sb, c.Y, new[]
             {
                 ("Jami aholi", pop.Count.ToString(), Gold),
@@ -324,13 +328,56 @@ namespace AndijonSaltanatlar.UI
                     SeasonVisuals.ComfortOf(_state.Season, _state.Weather.Current, _state.Clock.DayFraction) == Comfort.Qulay ? Green : Red),
             });
             y += 8;
-            SectionTitle(sb, "TURMUSH KO'RSATKICHLARI", c.X, y); y += 28;
-            int w = Math.Min(c.Width, 640);
-            Meter(sb, new Rectangle(c.X, y, w, 22), "Baxt", (int)pop.AvgHappiness); y += 32;
-            Meter(sb, new Rectangle(c.X, y, w, 22), "Sog'liq", (int)pop.AvgHealth); y += 32;
-            Meter(sb, new Rectangle(c.X, y, w, 22), "Ta'lim", (int)pop.AvgEducation); y += 32;
-            Meter(sb, new Rectangle(c.X, y, w, 22), "Xavfsizlik", (int)pop.AvgSecurity); y += 32;
+            int half = c.Width / 2;
+            int lw = Math.Min(half - 20, 560);
+            SectionTitle(sb, "EHTIYOJLAR VA TURMUSH", c.X, y);
+            SectionTitle(sb, "KASBLAR", c.X + half + 10, y);
+            int ly = y + 28;
+            (string Name, float V)[] meters =
+            {
+                ("Oziq-ovqat", pop.NeedFood), ("Uy-joy", pop.NeedHousing), ("Xavfsizlik", pop.NeedSecurity),
+                ("Savdo", pop.NeedTrade), ("Ta'lim", pop.NeedEducation), ("Tibbiyot", pop.NeedHealth),
+                ("Baxt", pop.AvgHappiness), ("Sog'liq", pop.AvgHealth)
+            };
+            foreach (var m in meters)
+            {
+                if (ly > c.Bottom - 24) break;
+                Meter(sb, new Rectangle(c.X, ly, lw, 20), m.Name, (int)m.V);
+                ly += 27;
+            }
+
+            // Kasblar guruhlar bo'yicha (ish o'rni bor yoki band bo'lganlari yorqin)
+            int rx = c.X + half + 10, colW = Math.Max(120, (c.Right - rx) / 2), rowY = y + 28, col = 0;
+            string lastGroup = null;
+            foreach (CitizenProfession p in ProfessionDisplayOrder)
+            {
+                string g = PopulationManager.ProfessionGroup(p);
+                if (g != lastGroup)
+                {
+                    if (col != 0) { rowY += 19; col = 0; }
+                    if (rowY > c.Bottom - 18) break;
+                    _font.Draw(sb, g.ToUpperInvariant(), new Vector2(rx, rowY), Gold, 2, 1);
+                    rowY += 19;
+                    lastGroup = g;
+                }
+                if (rowY > c.Bottom - 18) break;
+                int n = pop.CountProfession(p);
+                int x = rx + col * colW;
+                _font.Draw(sb, FitText(PopulationManager.ProfessionName(p), colW - 44), new Vector2(x, rowY), n > 0 ? Cream : Muted, 2, 1);
+                _font.DrawRight(sb, n.ToString(), new Vector2(x + colW - 14, rowY), n > 0 ? Gold : Muted, 2, 1);
+                if (++col == 2) { col = 0; rowY += 19; }
+            }
         }
+
+        /// <summary>Aholi panelida kasblar tartibi (guruhlar ketma-ket).</summary>
+        private static readonly CitizenProfession[] ProfessionDisplayOrder =
+        {
+            CitizenProfession.Dehqon, CitizenProfession.Bogbon, CitizenProfession.Chorvador, CitizenProfession.Baliqchi,
+            CitizenProfession.Hunarmand, CitizenProfession.Quruvchi, CitizenProfession.Konchi,
+            CitizenProfession.Savdogar, CitizenProfession.Tashuvchi, CitizenProfession.Omborchi, CitizenProfession.SoliqYiguvchi, CitizenProfession.BozorEgasi,
+            CitizenProfession.Muallim, CitizenProfession.Olim, CitizenProfession.Tabib, CitizenProfession.Memor, CitizenProfession.Amaldor,
+            CitizenProfession.Soqchi, CitizenProfession.None
+        };
 
         private void DrawDiagArmy(SpriteBatch sb)
         {
@@ -430,9 +477,9 @@ namespace AndijonSaltanatlar.UI
                 y += 2;
                 Color tc = unlocked ? Cream : Muted;
                 _font.Draw(sb, "Kuch: " + d.Power + " (" + d.Attack + "/" + d.Defense + ")", new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
-                _font.Draw(sb, "HP " + d.Health + "  Tez " + d.Speed + (d.Armor > 0 ? "  Zirh " + d.Armor + "%" : ""), new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
+                _font.Draw(sb, "HP " + d.Health + (d.Armor > 0 ? "  Zirh " + d.Armor + "%" : ""), new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
                 _font.Draw(sb, "Narx: " + d.TrainingCost + (_buyQty[i] > 1 ? " x" + _buyQty[i] + " = " + total : ""), new Vector2(r.X + 7, y), unlocked ? (afford ? Gold : Red) : Muted, 2, 1); y += 19;
-                _font.Draw(sb, "Maosh: " + d.Upkeep + " / kun", new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
+                _font.Draw(sb, "Tez " + d.Speed + "  Maosh " + d.Upkeep + "/kun", new Vector2(r.X + 7, y), tc, 2, 1); y += 19;
                 if (!unlocked)
                     _font.Draw(sb, "QULF: " + UnitCatalog.LockText(d, researched), new Vector2(r.X + 7, y), Red, 2, 1);
                 else

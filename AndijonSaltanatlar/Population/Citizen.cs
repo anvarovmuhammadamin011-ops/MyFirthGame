@@ -12,7 +12,16 @@ namespace AndijonSaltanatlar.Population
         Muallim,     // maktab / madrasa
         Soqchi,      // qarorgoh / darvoza
         Amaldor,     // boshqaruv qarorgohi
-        Tashuvchi    // ombor / bozor
+        Tashuvchi,   // karvonsaroy (ko'rinishda "Karvonchi")
+        // --- kengaytma (saqlashda butun son — faqat oxiriga qo'shiladi) ---
+        Chorvador,     // ferma: chorva, sut, go'sht, jun
+        Konchi,        // kon: tosh va ma'dan
+        Baliqchi,      // baliqxona: daryo va ariqlardan baliq
+        Omborchi,      // karvonsaroy ombori: zaxira, isrofni kamaytiradi
+        SoliqYiguvchi, // saroy devoni: soliq tushumi
+        BozorEgasi,    // bozor: savdo infratuzilmasi
+        Olim,          // madrasa: ilm-fan, texnologiya tezligi
+        Memor          // saroy: loyiha, qurilish tezligi
     }
 
     public enum CitizenState

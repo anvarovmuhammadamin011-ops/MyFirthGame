@@ -766,6 +766,138 @@ namespace AndijonSaltanatlar.Core.Graphics
             return ic.C;
         }
 
+        // =====================================================================
+        //  USTAXONA (3x3) — hunarmandlar: ayvonli ishxona, kulol xumdoni, xumlar, sandon
+        // =====================================================================
+        public static Canvas Workshop()
+        {
+            var ic = new IsoCanvas(3, 74);
+            ic.Top(0.08f, 0.08f, 2.92f, 2.92f, 0, new Color(190, 162, 118));
+            // orqadagi ishxona (loy-g'isht, tekis tom)
+            ic.Box(0.2f, 0.2f, 2.8f, 1.2f, 0, 28, Pal.Mud, 5, Pal.Plaster);
+            ic.Parapet(0.2f, 0.2f, 2.8f, 1.2f, 28, Pal.Plaster);
+            foreach (float x in new[] { 0.7f, 2.2f }) ic.FramedArch(true, x, 1.2f, 0.2f, 0, 17, Pal.BrickPale, Pal.Door);
+            // ayvon ostida: dastgoh va sandon
+            ic.Box(1.15f, 1.35f, 1.75f, 1.6f, 0, 7, new Color(150, 106, 62), 3);
+            ic.Box(1.95f, 1.45f, 2.15f, 1.65f, 0, 6, Pal.Steel);
+            // ayvon: yog'och ustunlar va soyabon
+            foreach (float x in new[] { 0.32f, 1.5f, 2.68f }) ic.Pole(x, 1.86f, 0, 22, Pal.Wood, 2);
+            ic.Box(0.2f, 1.2f, 2.8f, 1.95f, 21, 24, Pal.Wood, 0, new Color(170, 120, 70));
+            // kulol xumdoni (o'ng oldinda) — ichida olov
+            ic.Cylinder(2.35f, 2.45f, 0, 13, 9, Pal.BrickPale, 4);
+            ic.Dome(2.35f, 2.45f, 13, 9, 7, Pal.Brick, 0, false);
+            Vector2 fire = ic.P(2.35f, 2.9f, 4);
+            ic.C.FillEllipse(fire.X, fire.Y, 3.5f, 2.5f, new Color(255, 150, 50));
+            ic.C.FillEllipse(fire.X, fire.Y + 0.5f, 2f, 1.4f, new Color(255, 230, 120));
+            // xumlar va ko'zalar (chap oldinda)
+            foreach (var (x, y, r) in new[] { (0.5f, 2.35f, 4.5f), (0.85f, 2.6f, 3.6f), (0.45f, 2.75f, 3.2f), (1.2f, 2.45f, 2.8f) })
+            {
+                Vector2 p = ic.P(x, y, 4);
+                ic.C.FillEllipse(p.X, p.Y, r, r * 1.15f, new Color(176, 98, 58));
+                ic.C.FillEllipse(p.X - r * 0.3f, p.Y - r * 0.4f, r * 0.35f, r * 0.3f, new Color(214, 140, 92));
+                ic.C.FillEllipse(p.X, p.Y - r * 1.05f, r * 0.55f, r * 0.25f, new Color(90, 50, 30));
+            }
+            ic.Pole(2.72f, 0.32f, 28, 46, Pal.Wood, 1);
+            ic.Flag(2.72f, 0.32f, 46, new Color(176, 98, 58));
+            ic.C.Outline(Outline);
+            return ic.C;
+        }
+
+        // =====================================================================
+        //  KON (3x3) — zinapoyali qoya, yog'och ramali kon og'zi, relsli arava, ma'dan uyumlari
+        // =====================================================================
+        public static Canvas Mine()
+        {
+            var ic = new IsoCanvas(3, 80);
+            Color rock = new Color(150, 138, 124), rockDark = new Color(118, 108, 98);
+            ic.Top(0.08f, 0.08f, 2.92f, 2.92f, 0, new Color(170, 150, 120), 0.1f);
+            ic.Box(0.1f, 0.1f, 2.7f, 1.65f, 0, 30, rock, 0, Canvas.Shade(rock, 1.04f), 0.14f);
+            ic.Box(0.18f, 0.18f, 2.0f, 1.25f, 30, 46, rockDark, 0, rock, 0.14f);
+            ic.Box(0.25f, 0.22f, 1.2f, 0.85f, 46, 58, rock, 0, Canvas.Shade(rock, 1.1f), 0.16f);
+            // kon og'zi: yog'och ramali tuynuk
+            ic.FramedArch(true, 1.3f, 1.65f, 0.3f, 0, 21, Pal.Wood, new Color(26, 20, 18));
+            foreach (float x in new[] { 0.98f, 1.62f }) ic.Pole(x, 1.68f, 0, 22, Pal.Wood, 2);
+            ic.QuadSW(0.92f, 1.68f, 1.68f, 20, 24, Pal.Wood);
+            Vector2 lamp = ic.P(1.7f, 1.7f, 16);
+            ic.C.FillEllipse(lamp.X, lamp.Y, 1.8f, 2.2f, new Color(255, 214, 90));
+            // relslar va arava
+            foreach (float off in new[] { -0.09f, 0.09f })
+                ic.C.Line(ic.P(1.3f + off, 1.65f, 0), ic.P(1.3f + off, 2.85f, 0), Pal.Steel);
+            ic.Box(1.12f, 2.15f, 1.5f, 2.55f, 1, 8, Pal.Wood, 3);
+            Vector2 ore = ic.P(1.31f, 2.35f, 9);
+            ic.C.FillBlob(ore.X, ore.Y, 6, 3, new Color(176, 112, 70));
+            // ma'dan va tosh uyumlari
+            Vector2 pile = ic.P(2.3f, 2.35f, 3);
+            ic.C.FillBlob(pile.X, pile.Y, 9, 5, new Color(186, 120, 74));
+            Vector2 stone = ic.P(0.5f, 2.4f, 3);
+            ic.C.FillBlob(stone.X, stone.Y, 8, 4.5f, new Color(160, 156, 148));
+            ic.C.Outline(Outline);
+            return ic.C;
+        }
+
+        // =====================================================================
+        //  BALIQXONA (3x3) — suv bo'yidagi uy, iskala, qayiq, baliq quritish so'rilari
+        // =====================================================================
+        public static Canvas Fishery()
+        {
+            var ic = new IsoCanvas(3, 64);
+            ic.Top(0.08f, 0.08f, 2.92f, 2.92f, 0, new Color(214, 192, 148));
+            ic.Top(1.95f, 0.08f, 2.92f, 2.92f, 0, Pal.Water, 0.03f);
+            ic.Box(0.2f, 0.2f, 1.6f, 1.35f, 0, 22, Pal.Plaster, 0, new Color(196, 168, 110));
+            ic.Parapet(0.2f, 0.2f, 1.6f, 1.35f, 22, new Color(178, 150, 96));
+            ic.FramedArch(true, 0.9f, 1.35f, 0.2f, 0, 15, Pal.BrickPale, Pal.Door);
+            // iskala va qayiq
+            ic.Box(1.6f, 1.15f, 2.75f, 1.55f, 0, 3, Pal.Wood, 0, new Color(176, 128, 78));
+            Vector2 boat = ic.P(2.45f, 2.3f, 1);
+            ic.C.FillEllipse(boat.X, boat.Y, 11, 4.5f, new Color(120, 78, 44));
+            ic.C.FillEllipse(boat.X, boat.Y - 1, 8.5f, 2.6f, new Color(160, 112, 66));
+            // baliq quritish so'risi
+            foreach (float x in new[] { 0.35f, 1.35f }) ic.Pole(x, 2.15f, 0, 15, Pal.Wood, 1);
+            ic.C.Line(ic.P(0.35f, 2.15f, 14), ic.P(1.35f, 2.15f, 14), new Color(110, 80, 50));
+            for (int i = 0; i < 5; i++)
+            {
+                Vector2 f = ic.P(0.5f + i * 0.17f, 2.15f, 11);
+                ic.C.FillEllipse(f.X, f.Y, 1.3f, 3f, new Color(196, 206, 214));
+            }
+            // quritilayotgan to'r
+            for (int i = 0; i < 4; i++)
+                ic.C.Line(ic.P(0.3f + i * 0.2f, 2.6f, 0), ic.P(0.4f + i * 0.2f, 2.85f, 6), new Color(90, 74, 56));
+            ic.C.Outline(Outline);
+            return ic.C;
+        }
+
+        // =====================================================================
+        //  SHIFOXONA (3x3) — feruza gumbazli dorushshifo, peshtoq, dorivor o'tlar bog'i
+        // =====================================================================
+        public static Canvas Clinic()
+        {
+            var ic = new IsoCanvas(3, 86);
+            ic.Top(0.08f, 0.08f, 2.92f, 2.92f, 0, new Color(200, 178, 136));
+            ic.Box(0.2f, 0.2f, 2.8f, 1.75f, 0, 30, Pal.Plaster, 6, Pal.BrickPale);
+            ic.Parapet(0.2f, 0.2f, 2.8f, 1.75f, 30, Pal.BrickPale);
+            ic.Dome(1.5f, 0.95f, 30, 11, 15, Pal.Turquoise, 8, true);
+            // peshtoq
+            ic.Box(1.08f, 1.7f, 1.92f, 1.92f, 0, 42, Pal.BrickPale, 6, Pal.Plaster);
+            ic.Arch(true, 1.5f, 1.92f, 0.3f, 0, 32, Canvas.Shade(Pal.Turquoise, 0.8f));
+            ic.Arch(true, 1.5f, 1.92f, 0.21f, 0, 26, Pal.Door);
+            ic.QuadSW(1.08f, 1.92f, 1.92f, 36, 39, Canvas.Shade(Pal.Blue, 0.8f));
+            // dorivor o'tlar bog'i (ikki tomonda) va hovuzcha
+            foreach (var (x0, x1) in new[] { (0.3f, 1.0f), (2.0f, 2.7f) })
+            {
+                ic.Top(x0, 2.1f, x1, 2.8f, 1, Pal.LeafDark, 0.18f);
+                for (int i = 0; i < 6; i++)
+                {
+                    Vector2 fl = ic.P(x0 + 0.1f + (i % 3) * 0.24f, 2.25f + (i / 3) * 0.3f, 3);
+                    ic.C.FillEllipse(fl.X, fl.Y, 1.6f, 1.3f, i % 2 == 0 ? new Color(236, 214, 120) : new Color(214, 150, 210));
+                }
+            }
+            ic.Cylinder(1.5f, 2.45f, 0, 4, 6, Pal.Stone);
+            Vector2 w = ic.P(1.5f, 2.45f, 4);
+            ic.C.FillEllipse(w.X, w.Y, 4.5f, 2.2f, Pal.Water);
+            ic.C.Outline(Outline);
+            return ic.C;
+        }
+
         private static void Corner(IsoCanvas ic, float x, float y, float z, Color w)
         {
             ic.Box(x - 0.05f, y - 0.05f, x + 0.5f, y + 0.5f, 0, z + 8, w, 6, Pal.Mud);
