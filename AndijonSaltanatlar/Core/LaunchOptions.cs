@@ -154,6 +154,15 @@ public sealed class LaunchOptions
 	/// <summary>Sinov: K-uyga (ro'yxat tartibida) kirish — ichki ko'rinishni tekshirish uchun.</summary>
 	public int? EnterHouse;
 
+	/// <summary>Sinov (serversiz): shu qasringizga AI hujumini darhol boshlash (--ai-attack Asaka).</summary>
+	public string AiAttack;
+	/// <summary>Sinov: AI yurishi necha soniyada yetib keladi (--ai-attack bilan).</summary>
+	public float? AiAttackSeconds;
+	/// <summary>Sinov (serversiz): shu qasrni o'yinchiniki qilib, ichiga kirish (--visit Andijon).</summary>
+	public string Visit;
+	/// <summary>Sinov: --visit qasrining himoya darajasi (0..5).</summary>
+	public int VisitFortify;
+
 	public static LaunchOptions Parse(string[] args)
 	{
 		LaunchOptions launchOptions = new LaunchOptions();
@@ -344,6 +353,22 @@ public sealed class LaunchOptions
 				break;
 			case "--map-pick":
 				launchOptions.MapPick = text;
+				i++;
+				break;
+			case "--ai-attack":
+				launchOptions.AiAttack = text;
+				i++;
+				break;
+			case "--ai-attack-secs":
+				launchOptions.AiAttackSeconds = float.Parse(text, CultureInfo.InvariantCulture);
+				i++;
+				break;
+			case "--visit":
+				launchOptions.Visit = text;
+				i++;
+				break;
+			case "--visit-fortify":
+				launchOptions.VisitFortify = int.Parse(text, CultureInfo.InvariantCulture);
 				i++;
 				break;
 			case "--offline":

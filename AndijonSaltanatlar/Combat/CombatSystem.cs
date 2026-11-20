@@ -472,8 +472,11 @@ namespace AndijonSaltanatlar.Combat
         // BOSQIN
         // ==================================================================
 
-        /// <summary>Bosqinni boshlaydi (ogohlantirish bilan). manual=true — B tugmasi.</summary>
-        public void TriggerRaid(bool manual)
+        /// <summary>
+        /// Bosqinni boshlaydi (ogohlantirish bilan). manual=true — B tugmasi. attacker — hujum qilgan AI davlat nomi
+        /// (serversiz dunyoda AI qo'shini Asakaga yetib kelganda); null — oddiy bosqinchilar.
+        /// </summary>
+        public void TriggerRaid(bool manual, string attacker = null)
         {
             if (RaidActive || RaidIncoming)
             {
@@ -482,8 +485,10 @@ namespace AndijonSaltanatlar.Combat
             }
             _gateIndex = _rng.Next(4);
             _warnTimer = manual ? 3f : 6f;
-            _state.ShowMessage("DIQQAT! " + GateNames[_gateIndex] + " darvoza tomondan dushman yaqinlashmoqda!", true);
-            _state.ShowVizier("Dushman yaqinlashmoqda!", "Hazratim, " + GateNames[_gateIndex] + " darvoza tomondan dushman ko'rindi! Askarlarni himoyaga chorlang va xalqni uylarga kiriting.");
+            string who = string.IsNullOrEmpty(attacker) ? "dushman" : attacker + " qo'shini";
+            _state.ShowMessage("DIQQAT! " + GateNames[_gateIndex] + " darvoza tomondan " + who + " yaqinlashmoqda!", true);
+            _state.ShowVizier(string.IsNullOrEmpty(attacker) ? "Dushman yaqinlashmoqda!" : "Sizga hujum boshlandi!",
+                "Hazratim, " + GateNames[_gateIndex] + " darvoza tomondan " + who + " ko'rindi! Askarlarni himoyaga chorlang va xalqni uylarga kiriting.");
         }
 
         /// <summary>Sinov/ishga tushirish parametri uchun: ogohlantirishsiz darhol bosqin.</summary>

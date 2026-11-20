@@ -88,9 +88,25 @@ namespace AndijonSaltanatlar.World
                     // Zarba yegan: qizarish asta so'nadi
                     SpriteEffects fx = o.Flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
                     Vector2 feet = IsoMath.TileToWorld(cu.Position);
-                    // Yurganda tananing yengil ko'tarilib-tushishi (haqiqiy qadam hissi) — har kadr emas, qadam ritmida.
-                    if (cu.State == AndijonSaltanatlar.Units.UnitState.Walking && !cu.IsDown)
-                        feet.Y -= MathF.Abs(MathF.Sin(_time * 6.2f + cu.PerEntityPhaseOffset)) * 1.3f;
+                    // Yurganda tananing yengil ko'tarilib-tushishi — oyoq kadrlari bilan BIR XIL fazada (bosib o'tilgan
+                    // masofadan): har qadamda bir marta. Joyida tursa (yo'l to'silgan) — sakramaydi.
+                    if (cu.IsStepping && !cu.IsDown)
+                        feet.Y -= MathF.Abs(MathF.Sin(cu.WalkPhase * MathF.PI * 2f)) * 1.3f;
+                    // O'tirgan / ovqatlanayotgan fuqaro (bino oldidagi supada): gavda bukilgan — pastroq va qisqaroq,
+                    // ovqatlanayotganda qo'l/bosh yengil qimirlaydi. Binoga kirgan mehmon — ichkarida, chizilmaydi.
+                    float sitSquash = 1f;
+                    if (cu is CitizenUnit seated && seated.IsInsideBuilding && !cu.IsDown)
+                    {
+                        var act = seated.ActivityIcon;
+                        if (act == AndijonSaltanatlar.Units.CitizenActivityIcon.Visiting) continue;
+                        if (act == AndijonSaltanatlar.Units.CitizenActivityIcon.Sitting || act == AndijonSaltanatlar.Units.CitizenActivityIcon.Eating)
+                        {
+                            sitSquash = 0.78f;
+                            feet.Y += 3f;
+                            if (act == AndijonSaltanatlar.Units.CitizenActivityIcon.Eating)
+                                feet.Y += MathF.Abs(MathF.Sin(_time * 7f + cu.PerEntityPhaseOffset)) * 1.5f;
+                        }
+                    }
                     var origin = new Vector2(o.Texture.Width / 2f, o.Texture.Height - AssetManager.FootOf(o.Texture));
                     float k = AssetManager.ScaleOf(o.Texture) * AssetManager.UnitScale;
                     Vector2 body = cu.BodyScale; // shoh: semiz/ingichka, past/baland
@@ -155,7 +171,7 @@ namespace AndijonSaltanatlar.World
                             }
                         }
                         else
-                        sb.Draw(o.Texture, at, null, tint, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y), fx, 0f);
+                        sb.Draw(o.Texture, at, null, tint, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y * sitSquash), fx, 0f);
                         // Yelkadagi narsa (hosil qopi)
                         if (cu.CarryKey != null && _assets.TryGet(cu.CarryKey) is Texture2D carry)
                         {
@@ -174,7 +190,7 @@ namespace AndijonSaltanatlar.World
                             }
                         // Zarba tekkan lahza: oq chaqnash
                         if (cu.FlashTimer > 0f && _assets.FlashOf(o.Texture) is Texture2D wf)
-                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y), fx, 0f);
+                            sb.Draw(wf, at, null, Color.White * (cu.FlashTimer / Unit.FlashTime) * cu.FadeAlpha, rot + hrot, origin, new Vector2(k * body.X, sy * k * body.Y * sitSquash), fx, 0f);
                     }
                     if (cu is CitizenUnit citizen && !cu.IsDown)
                     {

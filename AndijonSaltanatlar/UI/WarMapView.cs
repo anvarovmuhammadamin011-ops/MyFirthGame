@@ -31,6 +31,12 @@ namespace AndijonSaltanatlar.UI
         public bool SiegeMarching => _siegeTarget != null;
         /// <summary>Yurish boshlandi — Game1 shaharda qo'shin chiqib ketishini ko'rsatadi.</summary>
         public Action<WarMapRegionDto> SiegeDeparted;
+
+        // --- EGALLANGAN SHAHARGA KIRISH (serversiz dunyo) ---
+        /// <summary>"SHAHARGA KIRISH" bosildi — Game1 shahar ko'rinishini ochadi va buni null qiladi.</summary>
+        public WarMapRegionDto VisitRequested { get; set; }
+        /// <summary>Serversiz dunyo: qasr himoya darajasi 0..5 (Game1 beradi).</summary>
+        public Func<int, int> LocalFortifyLevel;
         private WarMapRegionDto _siegeTarget;
         private int _siegeHome = -1;
         private int[] _siegeColor = { 70, 130, 220 };
@@ -252,12 +258,14 @@ namespace AndijonSaltanatlar.UI
             int x = info.X + 14, y = info.Y + 12, iw = info.Width - 28;
             float lh = ui.Type.LineHeight(TextStyle.Secondary);
 
-            // Menga qarab kelayotgan qo'shinlar — eng yuqorida ogohlantirish
+            // Menga qarab kelayotgan qo'shinlar — eng yuqorida ogohlantirish (soniya jonli kamayadi)
+            float since = ui.Time - _mapFetchTime;
             foreach (MarchDto m in w.Marches.Where(m => m.TargetIsMine))
             {
                 var wr = new Rectangle(x, y, iw, (int)(lh * 3 + 12));
                 ui.Rounded(wr, T.Danger * 0.2f, 8);
-                ui.Paragraph("DIQQAT: " + m.KingdomName + " (" + m.UnitCount + " birlik) " + m.TargetName + " qasringizga kelmoqda — " + m.SecondsLeft + " s", new Rectangle(wr.X + 8, wr.Y + 5, wr.Width - 16, wr.Height - 6), TextStyle.Secondary, T.TextPrimary, 3);
+                int left = (int)Math.Ceiling(Math.Max(0f, m.SecondsLeft - since));
+                ui.Paragraph("DIQQAT: " + m.KingdomName + " (" + m.UnitCount + " birlik) " + m.TargetName + " qasringizga kelmoqda — " + left + " s", new Rectangle(wr.X + 8, wr.Y + 5, wr.Width - 16, wr.Height - 6), TextStyle.Secondary, T.TextPrimary, 3);
                 y += wr.Height + 6;
             }
 
@@ -298,6 +306,23 @@ namespace AndijonSaltanatlar.UI
             if (!r.IsMine && r.OwnerKingdomId != 0) Row("Himoya ≈ " + r.DefenseEstimate);
             if (!r.IsMine && r.MarchSeconds > 0) Row("Yo'l: " + r.MarchSeconds + " soniya · yurish tekin", T.TextSecondary);
             if (r.OutcomeUz.Length > 0 && (!tight || r.IsMine)) y += (int)ui.Paragraph(r.OutcomeUz, new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3) + 6;
+            // Serversiz dunyo: egallangan qasr (Asaka emas) — himoya darajasi va shaharga kirib kuchaytirish
+            if (r.IsMine && LocalMode && r.Name != AndijonSaltanatlar.Online.LocalWorld.HomeRegion)
+            {
+                int lv = LocalFortifyLevel?.Invoke(r.RegionId) ?? 0;
+                int max = AndijonSaltanatlar.Online.LocalWorld.MaxFortify;
+                Row("Himoya darajasi: " + lv + "/" + max, lv >= max ? T.Primary : lv == 0 ? T.Warning : T.TextPrimary);
+                Row(lv < max ? "Keyingi daraja: " + AndijonSaltanatlar.Online.LocalWorld.FortifyCost(lv) + " tanga" : "Qal'a eng yuqori darajada", T.TextSecondary);
+                if (w.Marches.Any(m => m.TargetIsMine && m.TargetRegionId == r.RegionId))
+                    Row("Dushman kelmoqda — tezroq kuchaytiring!", T.Danger);
+                if (!tight || lv == 0)
+                    ui.Paragraph(lv == 0 ? "Himoyasiz qasrni dushman oson qaytarib oladi. Shaharga kirib devor, darvoza va minoralarni kuchaytiring."
+                        : "Shaharga kirib devor, darvoza va minoralarni yana kuchaytirishingiz mumkin.",
+                        new Rectangle(x, y, iw, (int)(lh * 3 + 6)), TextStyle.Secondary, T.TextSecondary, 3);
+                if (ui.Button(new Rectangle(x, info.Bottom - h - 12, iw, h), "SHAHARGA KIRISH", ButtonKind.Primary, true, "Shahar ichini ko'rish va himoyani kuchaytirish"))
+                    VisitRequested = r;
+                return;
+            }
             if (r.IsMine || r.OwnerKingdomId == 0) { if (r.BlockReasonUz.Length > 0) ui.Paragraph(r.BlockReasonUz, new Rectangle(x, y, iw, (int)(lh * 2 + 4)), TextStyle.Secondary, T.TextSecondary, 2); return; }
 
             // Promt 6: diplomatiya — boshqa saltanatga mehmon borish, sovg'a va xat (faqat onlayn)

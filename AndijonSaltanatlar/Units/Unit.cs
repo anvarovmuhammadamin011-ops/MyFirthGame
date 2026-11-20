@@ -35,11 +35,18 @@ namespace AndijonSaltanatlar.Units
         protected static readonly Random Rng = new Random(GameConfig.WorldSeed);
 
         // --- Animatsiya holati ---
-        private readonly float[] _walkPhaseTicks = new float[4]; // 4 ta yo'nalish uchun phase offset (placeholder)
-        private int _walkPhaseIndex;
-        private float _animTimer;
         private float _walkDist;
         private Vector2 _animLastPos = new Vector2(float.NaN, float.NaN);
+        /// <summary>Oxirgi haqiqiy siljishdan beri o'tgan vaqt (soniya).</summary>
+        private float _sinceStep = 1f;
+        /// <summary>Shuncha vaqt siljimasa — "yurish" holatida ham turish kadri (oyoq qadam o'rtasida qotmaydi).</summary>
+        private const float StepGrace = 0.15f;
+
+        /// <summary>Yurish sikli ichidagi joy (1.0 = to'liq sikl, ikki qadam). Oyoq kadrlari va tana ko'tarilishi shundan olinadi.</summary>
+        public float WalkPhase => _walkDist / MathF.Max(0.1f, WalkCycleTiles) + PerEntityPhaseOffset / (MathF.PI * 2f);
+
+        /// <summary>Unit hozir haqiqatan qadam tashlayapti (yurish holatida va oxirgi lahzada siljigan).</summary>
+        public bool IsStepping => State == UnitState.Walking && _sinceStep < StepGrace;
 
         /// <summary>
         /// To'liq yurish sikli (ikki qadam) necha tile masofada — kadrlar bosib o'tilgan yo'lga bog'langan,
@@ -61,11 +68,11 @@ namespace AndijonSaltanatlar.Units
         public float WorkCycle { get; set; } = 0.95f;
         private float _workTime;
         private float _moveNoise;
-        private bool _facingDirVested;
 
-        // yurish animatsiyasi cheklovlari
-        private const float WalkCyclePerTile = 0.55f;   // 1 ta tile uchun yurish sikli (sekund)
-        private const float MaxFrameDeltaFactor = 4.5f; // cheklov: animatsiya tezligi
+        // yo'nalish cheklovlari
+        /// <summary>Burilish gisterezisi (radian, ~15°): yangi burchak joriy sektor chegarasidan shuncha o'tmaguncha
+        /// yo'nalish o'zgarmaydi — jangda chegara atrofida chap-o'ng "lip-lip" titrash bo'lmaydi.</summary>
+        private const float FacingHysteresis = 0.26f;
         private const float DirectionSpringK = 18f;     // yo'nalish spring kuchi
         private const float DirectionDamping = 5f;       // yo'nalish dumpingsi
         private float _facingAngle;                     // tekislikdagi yo'nalish burchagi
@@ -232,11 +239,20 @@ namespace AndijonSaltanatlar.Units
             State = UnitState.Idle;
         }
 
-        /// <summary>Yo'nalishni silliqlashsiz, darhol berilgan tomonga buradi (o'yinchi boshqaruvi uchun).</summary>
+        /// <summary>
+        /// Yo'nalishni berilgan tomonga buradi. Gisterezis bilan: burchak ikki yo'nalish chegarasi atrofida tebransa
+        /// (jangda nishonga qarash, itarilish) sprayt har kadr chap-o'ng ag'darilmaydi. Keskin burilish (90°+) darhol.
+        /// </summary>
         public void SetFacing(Vector2 tileDelta)
         {
             if (tileDelta.LengthSquared() < 0.0001f) return;
-            Direction = AngleToDirection(MathF.Atan2(tileDelta.Y, tileDelta.X));
+            float angle = MathF.Atan2(tileDelta.Y, tileDelta.X);
+            Direction next = AngleToDirection(angle);
+            if (next == Direction) return;
+            // Joriy sektor markazidan og'ish: chegaradan (45°) kamida FacingHysteresis o'tgandagina buriladi
+            float off = MathF.Abs(WrapAngle(angle - DirectionToAngle(Direction)));
+            if (off < MathF.PI / 4f + FacingHysteresis) return;
+            Direction = next;
         }
 
         /// <summary>Hp'ni to'liq yoki qisman tiklash (bosqindan keyin).</summary>
@@ -405,7 +421,6 @@ namespace AndijonSaltanatlar.Units
         {
             Frames = frames;
             Texture = frames[0];
-            _facingDirVested = false;
         }
 
         /// <summary>
@@ -445,6 +460,9 @@ namespace AndijonSaltanatlar.Units
         private void ApplyAttackFrame()
         {
             if (AttackTimer <= 0f || IsDown || AttackFrames == null) return;
+            // Zarba kadrlari faqat old tomondan chizilgan: orqasi o'girilgan jangchi kameraga birdan o'girilib qolmasin —
+            // orqa kadr qoladi, zarba harakatini GetAttackPose (engashish, hamla, og'ish) beradi.
+            if (FacingAway && BackFrames != null) return;
             float p = AttackProgress;
             int kind, phase;
             if (AttackKind == AttackSpin) { kind = AttackSlash; phase = ((int)(p * 7f)) % 3; }
@@ -496,10 +514,17 @@ namespace AndijonSaltanatlar.Units
             };
         }
 
-        /// <summary>Sensor cheklovlariga ko'ra: har bir kasb xususiyatiga mos animatsiyani tanlash.</summary>
+        /// <summary>Holat va bosib o'tilgan yo'lga mos kadrni tanlash: turish, yurish (masofaga bog'liq), ish.</summary>
         protected void UpdateAnimation(float dt)
         {
-            // If frames is empty, fallback to placeholder logic
+            // Bosib o'tilgan masofa (teleport yoki qayta tug'ilish sakrashlari hisobga olinmaydi) — kadrlar
+            // bo'lmasa ham kuzatiladi (WalkPhase/IsStepping renderer va testlarda ishlatiladi)
+            float moved = float.IsNaN(_animLastPos.X) ? 0f : Vector2.Distance(Position, _animLastPos);
+            _animLastPos = Position;
+            if (moved < 1f) _walkDist += moved;
+            if (moved > 0.0005f && moved < 1f) _sinceStep = 0f;
+            else _sinceStep += dt;
+
             if (Frames == null || Frames.Length == 0)
             {
                 Texture = null;
@@ -507,12 +532,7 @@ namespace AndijonSaltanatlar.Units
             }
 
             Texture2D[] fr = Dir;
-            Texture = fr[0]; // default
-
-            // Bosib o'tilgan masofa (teleport yoki qayta tug'ilish sakrashlari hisobga olinmaydi)
-            float moved = float.IsNaN(_animLastPos.X) ? 0f : Vector2.Distance(Position, _animLastPos);
-            _animLastPos = Position;
-            if (moved < 1f) _walkDist += moved;
+            Texture = fr[0]; // turish
 
             // Ish: dehqon yer chopyapti (joyida turgan paytda ish kadrlari aylanadi)
             if (Working && WorkFrames != null && WorkFrames.Length > 0 && State != UnitState.Walking)
@@ -524,59 +544,21 @@ namespace AndijonSaltanatlar.Units
                 return;
             }
 
-            // Yurish: kadr = sikl ichidagi joy (masofa / sikl uzunligi). 3D modeldan 8 kadrli silliq sikl,
-            // eski rasmlarda 2 kadr. 
-            if (State == UnitState.Walking && Frames.Length > 1)
+            // Yurish: kadr = sikl ichidagi joy (masofa / sikl uzunligi) — oyoq yerda sirpanmaydi. 3D modeldan
+            // 8 kadrli silliq sikl. "Yurish" holatida, lekin joyida tursa (yo'l to'silgan, tiqilib qolgan) —
+            // oyoq qadam o'rtasida qotib qolmasin: turish kadri ko'rsatiladi.
+            if (State == UnitState.Walking && Frames.Length > 1 && _sinceStep < StepGrace)
             {
                 int walkFrames = Frames.Length - 1;
-                float phase = _walkDist / MathF.Max(0.1f, WalkCycleTiles) + (PerEntityPhaseOffset / (MathF.PI * 2f));
-                int idx = 1 + (int)(phase * walkFrames) % walkFrames;
+                int idx = 1 + (int)(WalkPhase * walkFrames) % walkFrames;
                 Texture = fr[idx];
-                return;
-            }
-
-            // Placeholder animatsiya — faqat yurishda animatsiya yuritish
-            if (State == UnitState.Walking)
-            {
-                // Harakat tezligiga mos keladigan animatsiya (spring-based eprimas)
-                float rawSpeed = Speed * SpeedScale * GaitScale;
-                float walkCycle = WalkCyclePerTile * rawSpeed; // sekundlik sikl
-                float cycleFreq = Math.Max(0.1f, walkCycle);
-                float phaseDelta = dt / cycleFreq;             // fase o'zgarishi
-
-                // Per-entity phase offset + transform noise
-                _walkPhaseIndex = (_walkPhaseIndex + 1) % 4;
-                float phaseNoise = _moveNoise * 0.05f;        // so'nggi cheklovlar
-                _animTimer += phaseDelta * (1f + phaseNoise);
-
-                // Kadrni tanlash: cheklovlarda frames[1..2] — yurish frames, frames[0] — idle
-                int walkFrames = Frames.Length - 1;
-                float t = _animTimer * MaxFrameDeltaFactor;
-                int idx = Frames.Length > 1 ? 1 + (int)(t % walkFrames) : 0;
-                Texture = fr[idx];
-            }
-            else
-            {
-                _animTimer = 0f;
-                Texture = fr[0];
-
-                // Idle animatsiyasi fasl bilan bog'liq: placeholder cheklovlariga ko'ra
-                if (State == UnitState.Idle && Frames.Length > 1 && dt > 0.016f)
-                {
-                    // Hozircha faqat 1-frame idle, lekin placeholder animatsiya vorislik qilishi mumkin
-                    Texture = fr[0];
-                }
             }
         }
 
         /// <summary>Yo'nalishni tabiiy ravishda yangilash (FaceTowards — spring-based).</summary>
         public void FaceTowards(Vector2 delta, float dt)
         {
-            if (delta.LengthSquared() < 0.0001f)
-            {
-                _facingDirVested = false;
-                return;
-            }
+            if (delta.LengthSquared() < 0.0001f) return;
 
             // Hozirgi yo'nalishni spring-based usulda yangilash (keskin burilishning oldini oladi)
             float targetAngle = MathF.Atan2(delta.Y, delta.X);

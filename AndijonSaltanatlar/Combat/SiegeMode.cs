@@ -152,12 +152,7 @@ namespace AndijonSaltanatlar.Combat
             _armyAtStart = mil.TotalUnits;
 
             // --- Dushman shahri (har qasr o'z urug'i bilan) ---
-            _map = new MapManager(_assets, GameConfig.MapSize, GameConfig.MapSize);
-            _buildings = new BuildingManager(_map, _assets);
-            _units = new UnitManager(_assets);
-            CityGenerator.Generate(_map, _buildings, _units, 7919 * (Math.Abs(t.RegionId) + 1));
-            CitizenSpawner.Spawn(_map, _units);
-            PatrolController.RouteAll(_map, _units);
+            RegionCity.Build(_assets, t.RegionId, out _map, out _buildings, out _units);
             _combat = new CombatSystem(_map, _units, _state) { Buildings = _buildings, SiegeMode = true };
             _renderer = new WorldRenderer(_assets, _font);
             _interior = new HouseInterior(_assets, _map, _buildings, _state);

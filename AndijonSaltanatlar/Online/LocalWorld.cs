@@ -10,10 +10,31 @@ using AndijonSaltanatlar.Shared.War;
 
 namespace AndijonSaltanatlar.Online
 {
+    /// <summary>AI hujumi voqeasi turi (Game1 ogohlantirish chiqaradi).</summary>
+    public enum AttackEventKind { Started, Held, Lost, RaidHome }
+
+    /// <summary>AI hujumi voqeasi: kim, qaysi qasringizga, necha soniyada / qanday natija.</summary>
+    public sealed class AttackEvent
+    {
+        public AttackEventKind Kind { get; set; }
+        /// <summary>Hujum qilayotgan davlat nomi (ko'rinadigan).</summary>
+        public string Attacker { get; set; } = "";
+        /// <summary>Nishon — o'yinchining qasri nomi.</summary>
+        public string Target { get; set; } = "";
+        public int TargetRegionId { get; set; }
+        /// <summary>Started: yetib kelishigacha soniya.</summary>
+        public int Seconds { get; set; }
+        /// <summary>Nishonning himoya darajasi (0..5).</summary>
+        public int Fortify { get; set; }
+        public bool IsHome => Target == LocalWorld.HomeRegion;
+    }
+
     /// <summary>
     /// SERVERSIZ DUNYO: butun O'zbekiston xaritasi (UzMap) shu qurilmada. O'yinchidan boshqa barcha hududlar AI davlatlarniki
     /// (tarixiy xonliklar va viloyat begliklari). M xaritadan istalgan AI qasriga yurish → qamal → g'alabada qasr
-    /// o'yinchiga o'tadi va bayrog'i tikiladi. Holat AppPaths ichidagi faylda (har akkauntga alohida) saqlanadi.
+    /// o'yinchiga o'tadi va bayrog'i tikiladi. Egallangan qasrni ichiga kirib kuchaytirish mumkin (himoya darajasi 0..5).
+    /// AI davlatlar ham vaqti-vaqti bilan o'yinchiga qo'shin yuboradi: egallangan qasr himoyasi yetmasa — qo'ldan ketadi,
+    /// Asakaga kelsa — shaharda jonli bosqin. Holat AppPaths ichidagi faylda (har akkauntga alohida) saqlanadi.
     /// Onlayn xarita oynasi bilan bir xil ko'rinishda chiziladi (WarOverviewDto quriladi).
     /// </summary>
     public sealed class LocalWorld
@@ -21,20 +42,46 @@ namespace AndijonSaltanatlar.Online
         public const int PlayerId = 1;
         private const string Player = "player";
         public const string HomeRegion = "Asaka";
+        /// <summary>Qasr himoyasining eng yuqori darajasi.</summary>
+        public const int MaxFortify = 5;
+        /// <summary>Yangi dunyoda birinchi AI hujumigacha o'yin vaqti (soniya).</summary>
+        public const float FirstAttackDelay = 480f;
+
+        /// <summary>Faol AI yurishi (o'yinchi qasriga kelayotgan qo'shin). Vaqt o'yin vaqtida sanaladi.</summary>
+        public sealed class AiMarch
+        {
+            /// <summary>Hujumchi AI davlat kaliti.</summary>
+            public string Attacker { get; set; } = "";
+            /// <summary>Qo'shin chiqqan qasr nomi.</summary>
+            public string Origin { get; set; } = "";
+            /// <summary>Nishon — o'yinchining qasri nomi.</summary>
+            public string Target { get; set; } = "";
+            public float Total { get; set; }
+            public float Left { get; set; }
+            public int Units { get; set; }
+        }
 
         private sealed class Data
         {
             public Dictionary<string, string> Owner { get; set; } = new Dictionary<string, string>();
             public List<string> Capitals { get; set; } = new List<string>();
             public int Conquests { get; set; }
+            /// <summary>Egallangan qasrlarning himoya darajasi (hudud nomi → 0..5). Qasr egasi almashsa o'chadi.</summary>
+            public Dictionary<string, int> Fortify { get; set; } = new Dictionary<string, int>();
+            /// <summary>Keyingi AI hujumigacha qolgan o'yin vaqti (soniya).</summary>
+            public float AttackClock { get; set; }
+            public AiMarch March { get; set; }
         }
 
         private readonly string _file;
         private Data _d;
+        private float _saveTimer;
         private static readonly MapKingdomSeed[] AllKingdoms = UzMap.Kingdoms.Concat(UzMap.ProvinceKingdoms).ToArray();
 
         public string PlayerName { get; set; } = "Saltanatingiz";
         public int[] PlayerColor { get; set; } = { 70, 130, 220 };
+        /// <summary>Hujum vaqti, nishoni va natijasi uchun tasodif (testlarda aniq urug' beriladi).</summary>
+        public Random Rng { get; set; } = new Random();
 
         private LocalWorld(string file) { _file = file; }
 
@@ -48,13 +95,16 @@ namespace AndijonSaltanatlar.Online
             // Katalogga keyin qo'shilgan hududlar ham AI davlatga beriladi
             foreach (MapRegionSeed r in UzMap.Regions)
                 if (!w._d.Owner.ContainsKey(r.Name)) w._d.Owner[r.Name] = r.Owner ?? UzMap.ProvinceKingdom(r.Province) ?? "andijon";
+            // Eski saqlashlarda himoya va hujum ma'lumoti yo'q
+            w._d.Fortify ??= new Dictionary<string, int>();
+            if (w._d.March == null && w._d.AttackClock <= 0f) w._d.AttackClock = FirstAttackDelay;
             return w;
         }
 
         /// <summary>Yangi dunyo: hamma hudud AI davlatlarniki, o'yinchida — Asaka. Har AI davlatning eng katta shahri — poytaxt.</summary>
         public void Reset()
         {
-            _d = new Data();
+            _d = new Data { AttackClock = FirstAttackDelay };
             foreach (MapRegionSeed r in UzMap.Regions)
                 _d.Owner[r.Name] = r.Owner ?? UzMap.ProvinceKingdom(r.Province) ?? "andijon";
             _d.Owner[HomeRegion] = Player;
@@ -110,6 +160,23 @@ namespace AndijonSaltanatlar.Online
                 else m.BlockReasonUz = "Sizning qasringiz";
                 dto.MapRegions.Add(m);
             }
+            // Sizga kelayotgan AI qo'shini — xaritada qizil yorliq, "DIQQAT" bloki va qasr atrofida qizil pulsatsiya
+            AiMarch am = _d.March;
+            int oi = am == null ? -1 : Array.FindIndex(UzMap.Regions, x => x.Name == am.Origin);
+            int ti = am == null ? -1 : Array.FindIndex(UzMap.Regions, x => x.Name == am.Target);
+            if (oi >= 0 && ti >= 0)
+            {
+                MapKingdomSeed k = Seed(am.Attacker);
+                dto.Marches.Add(new MarchDto
+                {
+                    ArmyId = 9000 + ti, ArmyName = KingdomName(am.Attacker) + " qo'shini", KingdomId = KingdomId(am.Attacker), KingdomName = KingdomName(am.Attacker),
+                    Color = new[] { k?.R ?? 150, k?.G ?? 150, k?.B ?? 150 },
+                    Flag = FlagSpec.ParseOr(k?.Flag ?? "", KingdomId(am.Attacker), k?.R ?? 150, k?.G ?? 150, k?.B ?? 150).Encode(),
+                    OriginRegionId = oi + 1, TargetRegionId = ti + 1, TargetName = am.Target,
+                    TotalSeconds = (int)Math.Ceiling(am.Total), SecondsLeft = (int)Math.Ceiling(Math.Max(0f, am.Left)),
+                    UnitCount = am.Units, IsMine = false, TargetIsMine = true
+                });
+            }
             return dto;
         }
 
@@ -122,7 +189,7 @@ namespace AndijonSaltanatlar.Online
             if (owner == Player) return "";
             if (!req.Won) return r.Name + " qamali muvaffaqiyatsiz — qo'shin chekindi.";
             string name = Seed(owner)?.Name ?? owner;
-            _d.Owner[r.Name] = Player;
+            SetOwner(r.Name, Player);
             _d.Capitals.Remove(r.Name);
             _d.Conquests++;
             // AI davlatda hudud qolsa va poytaxti yo'qolgan bo'lsa — eng katta shahri yangi poytaxt
@@ -131,6 +198,167 @@ namespace AndijonSaltanatlar.Online
                 _d.Capitals.Add(left.OrderByDescending(x => x.Population).First().Name);
             Save();
             return r.Name + " endi sizniki! Qasrga bayrog'ingiz tikildi." + (left.Count == 0 ? " " + name + " butunlay yengildi!" : "");
+        }
+
+        // ================================================================== QASRNI KUCHAYTIRISH
+
+        private static MapRegionSeed RegionOf(int regionId) => regionId >= 1 && regionId <= UzMap.Regions.Length ? UzMap.Regions[regionId - 1] : null;
+
+        /// <summary>Hudud nomidan RegionId (xaritadagi tartib raqami); topilmasa 0.</summary>
+        public static int RegionIdOf(string name) => Array.FindIndex(UzMap.Regions, r => r.Name == name) + 1;
+
+        private int FortifyOf(string region) => _d.Fortify.TryGetValue(region, out int v) ? Math.Clamp(v, 0, MaxFortify) : 0;
+
+        /// <summary>Hudud egasini almashtiradi; himoya darajasi yangi egaga o'tmaydi.</summary>
+        private void SetOwner(string region, string owner)
+        {
+            _d.Owner[region] = owner;
+            _d.Fortify.Remove(region);
+        }
+
+        /// <summary>O'yinchi qasrining himoya darajasi (0..5); o'yinchiniki bo'lmasa — 0.</summary>
+        public int FortifyLevel(int regionId)
+        {
+            MapRegionSeed r = RegionOf(regionId);
+            return r == null || _d.Owner[r.Name] != Player ? 0 : FortifyOf(r.Name);
+        }
+
+        /// <summary>Joriy darajadan keyingisiga o'tish narxi (tanga): 150, 270, 390, 510, 630.</summary>
+        public static int FortifyCost(int currentLevel) => 150 + 120 * Math.Clamp(currentLevel, 0, MaxFortify - 1);
+
+        /// <summary>Kuchaytirish mumkinmi: qasr o'yinchiniki, bosh shahar (Asaka) emas va daraja to'lmagan.</summary>
+        public bool CanFortify(int regionId)
+        {
+            MapRegionSeed r = RegionOf(regionId);
+            return r != null && r.Name != HomeRegion && _d.Owner[r.Name] == Player && FortifyOf(r.Name) < MaxFortify;
+        }
+
+        /// <summary>Himoyani bir daraja oshiradi va darhol saqlaydi. Yangi daraja qaytadi; mumkin bo'lmasa -1. Tangani chaqiruvchi yechadi.</summary>
+        public int Fortify(int regionId)
+        {
+            if (!CanFortify(regionId)) return -1;
+            MapRegionSeed r = RegionOf(regionId);
+            int nl = FortifyOf(r.Name) + 1;
+            _d.Fortify[r.Name] = nl;
+            Save();
+            return nl;
+        }
+
+        /// <summary>Qasr himoya kuchi: aholi va himoya darajasiga bog'liq.</summary>
+        public static double DefensePower(int population, int fortify) => (40 + population / 4.0) * (1 + 0.45 * Math.Clamp(fortify, 0, MaxFortify));
+
+        /// <summary>AI hujum kuchi (tasodif koeffitsientisiz): aholi va o'yinchi g'alabalari soni oshgani sari kuchayadi.</summary>
+        public double AttackPower(int population) => (60 + population / 3.0) * (1 + 0.05 * Math.Min(10, _d.Conquests));
+
+        // ================================================================== AI HUJUMI
+
+        /// <summary>Hozir sizga kelayotgan AI yurishi (yo'q bo'lsa null).</summary>
+        public AiMarch IncomingMarch => _d.March;
+
+        /// <summary>Keyingi AI hujumigacha qolgan o'yin vaqti (soniya).</summary>
+        public float SecondsToNextAttack => _d.AttackClock;
+
+        public static string KingdomName(string key) => Seed(key)?.Name ?? key;
+
+        /// <summary>
+        /// Har kadr (o'yin vaqti bilan): hujum taymeri, yurish va natija. Voqea bo'lsa qaytaradi (Game1 ogohlantiradi), aks holda null.
+        /// O'yin yopiq bo'lganda vaqt o'tmaydi — hujum ham to'xtab turadi.
+        /// </summary>
+        public AttackEvent Tick(float dt)
+        {
+            if (dt <= 0f) return null;
+            _saveTimer += dt;
+            AiMarch m = _d.March;
+            if (m != null)
+            {
+                // Nishon allaqachon sizniki emas (eski fayl) — yurish bekor
+                if (!_d.Owner.TryGetValue(m.Target, out string o) || o != Player) { _d.March = null; ScheduleNext(); Save(); return null; }
+                m.Left -= dt;
+                if (m.Left <= 0f) return Resolve(m);
+            }
+            else
+            {
+                _d.AttackClock -= dt;
+                if (_d.AttackClock <= 0f) return StartAttack(null);
+            }
+            if (_saveTimer >= 10f) { _saveTimer = 0f; Save(); }   // qolgan vaqt o'yin yopilganda ham saqlanib qolsin
+            return null;
+        }
+
+        /// <summary>
+        /// AI yurishini boshlaydi. Nishon: berilgan qasr (sinov) yoki tasodifiy — egallangan qasr (60%) yoki Asaka.
+        /// Hujumchi — nishonga eng yaqin AI qasri egasi. Yurish allaqachon bo'lsa yoki hujum qiladigan davlat qolmagan bo'lsa — null.
+        /// </summary>
+        public AttackEvent StartAttack(string target, float? seconds = null)
+        {
+            if (_d.March != null) return null;
+            var mine = UzMap.Regions.Where(r => _d.Owner[r.Name] == Player).ToList();
+            if (mine.Count == 0) return null;
+            MapRegionSeed t = target == null ? null : mine.FirstOrDefault(r => r.Name == target);
+            if (t == null)
+            {
+                var conquered = mine.Where(r => r.Name != HomeRegion).ToList();
+                t = conquered.Count > 0 && Rng.NextDouble() < 0.6
+                    ? conquered[Rng.Next(conquered.Count)]
+                    : mine.FirstOrDefault(r => r.Name == HomeRegion) ?? mine[0];
+            }
+            MapRegionSeed origin = UzMap.Regions.Where(r => _d.Owner[r.Name] != Player)
+                .OrderBy(r => Dist2(r, t)).FirstOrDefault();
+            if (origin == null) { ScheduleNext(); Save(); return null; }   // butun O'zbekiston sizniki — hujum qiladigan yo'q
+            float total = seconds ?? 90f + (float)Rng.NextDouble() * 30f;
+            _d.March = new AiMarch
+            {
+                Attacker = _d.Owner[origin.Name], Origin = origin.Name, Target = t.Name,
+                Total = Math.Max(1f, total), Left = Math.Max(1f, total),
+                Units = 12 + 3 * Math.Min(10, _d.Conquests) + Rng.Next(0, 9)
+            };
+            Save();
+            return new AttackEvent
+            {
+                Kind = AttackEventKind.Started, Attacker = KingdomName(_d.March.Attacker), Target = t.Name,
+                TargetRegionId = RegionIdOf(t.Name), Seconds = (int)Math.Ceiling(_d.March.Total), Fortify = FortifyOf(t.Name)
+            };
+        }
+
+        /// <summary>Yurish yetib keldi: Asaka — shaharda bosqin; egallangan qasr — himoya va hujum kuchi solishtiriladi.</summary>
+        private AttackEvent Resolve(AiMarch m)
+        {
+            _d.March = null;
+            ScheduleNext();
+            var ev = new AttackEvent { Attacker = KingdomName(m.Attacker), Target = m.Target, TargetRegionId = RegionIdOf(m.Target), Fortify = FortifyOf(m.Target) };
+            MapRegionSeed r = UzMap.Regions.FirstOrDefault(x => x.Name == m.Target);
+            if (m.Target == HomeRegion || r == null)
+            {
+                ev.Kind = AttackEventKind.RaidHome;   // Asaka hech qachon qo'ldan ketmaydi — shaharda jonli jang
+                Save();
+                return ev;
+            }
+            double def = DefensePower(r.Population, ev.Fortify);
+            double atk = AttackPower(r.Population) * (0.85 + Rng.NextDouble() * 0.45);
+            if (def >= atk) ev.Kind = AttackEventKind.Held;
+            else
+            {
+                ev.Kind = AttackEventKind.Lost;
+                SetOwner(m.Target, m.Attacker);
+                // Hujumchi davlatning poytaxti bo'lmasa (hammasi olingan bo'lgan) — qaytarib olgan qasri poytaxt
+                if (!UzMap.Regions.Any(x => _d.Owner[x.Name] == m.Attacker && _d.Capitals.Contains(x.Name)))
+                    _d.Capitals.Add(m.Target);
+            }
+            Save();
+            return ev;
+        }
+
+        /// <summary>Keyingi hujumgacha vaqt: egallangan qasr bo'lsa 6–9 daqiqa, bo'lmasa 10–14 daqiqa.</summary>
+        private void ScheduleNext()
+        {
+            bool conquered = _d.Owner.Any(kv => kv.Value == Player && kv.Key != HomeRegion);
+            _d.AttackClock = conquered ? 360f + (float)Rng.NextDouble() * 180f : 600f + (float)Rng.NextDouble() * 240f;
+        }
+
+        private static float Dist2(MapRegionSeed a, MapRegionSeed b)
+        {
+            float dx = UzMap.X(a.Lon) - UzMap.X(b.Lon), dy = UzMap.Y(a.Lat) - UzMap.Y(b.Lat);
+            return dx * dx + dy * dy;
         }
     }
 }

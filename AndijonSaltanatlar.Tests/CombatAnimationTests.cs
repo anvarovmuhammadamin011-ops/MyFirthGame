@@ -42,5 +42,44 @@ namespace AndijonSaltanatlar.Tests
             u.Update(0.016f);
             Assert.Equal(0f, u.FallAngle);                      // o'rnidan turdi
         }
+
+        [Fact]
+        public void Facing_NearBoundary_DoesNotFlicker()
+        {
+            var u = new RaiderUnit(new Vector2(5, 5), false);
+            u.SetFacing(new Vector2(1, 0));
+            Assert.Equal(Direction.East, u.Direction);
+            // East/South chegarasi (45°) atrofida tebranish (jangda nishonga qarash): sprayt chap-o'ng ag'darilmaydi
+            for (int i = 0; i < 20; i++)
+            {
+                float a = MathF.PI / 4f + (i % 2 == 0 ? 0.12f : -0.12f);
+                u.SetFacing(new Vector2(MathF.Cos(a), MathF.Sin(a)));
+                Assert.Equal(Direction.East, u.Direction);
+            }
+            // Chegaradan aniq o'tsa — buriladi
+            float b = MathF.PI / 4f + 0.45f;
+            u.SetFacing(new Vector2(MathF.Cos(b), MathF.Sin(b)));
+            Assert.Equal(Direction.South, u.Direction);
+            // Teskari tomonga — darhol
+            u.SetFacing(new Vector2(0, -1));
+            Assert.Equal(Direction.North, u.Direction);
+        }
+
+        [Fact]
+        public void Walking_StepsOnlyWhileActuallyMoving()
+        {
+            var u = new RaiderUnit(new Vector2(5, 5), false) { ExternallyControlled = true };
+            u.DriveMove(new Vector2(1, 0), 2f);
+            u.Update(0.016f);
+            float p0 = u.WalkPhase;
+            float step = u.WalkCycleTiles / 10f;
+            for (int i = 0; i < 10; i++) { u.Position += new Vector2(step, 0); u.Update(0.016f); }
+            Assert.True(u.IsStepping);
+            Assert.Equal(p0 + 1f, u.WalkPhase, 3);               // bitta sikl masofasi = bitta to'liq sikl (ikki qadam)
+            // Yo'l to'silgan: holat "yurish", lekin siljimaydi — qadam to'xtaydi (oyoq qotmaydi, tana joyida sakramaydi)
+            for (int i = 0; i < 15; i++) { u.DriveMove(new Vector2(1, 0), 2f); u.Update(0.016f); }
+            Assert.Equal(UnitState.Walking, u.State);
+            Assert.False(u.IsStepping);
+        }
     }
 }
