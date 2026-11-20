@@ -35,8 +35,8 @@ namespace AndijonSaltanatlar.Environment
                     // Bahor: yam-yashil, nam o't
                     return t == TileType.Grass ? new Color(150, 216, 128) : Color.White;
                 case Season.Yoz:
-                    // Yoz: to'q, quyoshda pishgan yashil (sarg'ish emas), tuproq biroz iliq
-                    return t == TileType.Grass ? new Color(170, 205, 120) : t == TileType.Ground ? new Color(246, 230, 196) : Color.White;
+                    // Yoz: to'q, barra yashil o't (sarg'ish emas), tuproq tabiiy iliq
+                    return t == TileType.Grass ? new Color(126, 194, 104) : t == TileType.Ground ? new Color(224, 210, 180) : Color.White;
                 case Season.Kuz:
                     // Kuz: oltin-sarg'ish, qurigan o't
                     return t == TileType.Grass ? new Color(224, 190, 112) : t == TileType.Ground ? new Color(234, 210, 168) : Color.White;
@@ -72,8 +72,8 @@ namespace AndijonSaltanatlar.Environment
                 case Season.Bahor:
                     return t == DecorationType.TreeApricot ? new Color(255, 214, 230) : new Color(188, 240, 170);
                 case Season.Yoz:
-                    // Yoz: to'q, quyuq yashil barglar
-                    return new Color(150, 198, 120);
+                    // Yoz: to'q, quyuq barra yashil barglar
+                    return new Color(120, 188, 102);
                 case Season.Kuz:
                     // har daraxt biroz boshqacha: sariq, to'q sariq, qizg'ish
                     int k = (seed * 7919) & 3;
@@ -144,9 +144,9 @@ namespace AndijonSaltanatlar.Environment
                 case Season.Yoz:
                     if (night < 0.3f)
                     {
-                        // Yozgi quyosh: iliq nur va havoda chang zarralari
-                        float a = 0.09f * (1f - night / 0.3f);
-                        sb.Draw(px, new Rectangle(0, 0, vw, vh), new Color(255, 214, 120) * a);
+                        // Yozgi quyosh: juda yengil, oqimtir-iliq nur (sariq emas) va havoda chang zarralari
+                        float a = 0.035f * (1f - night / 0.3f);
+                        sb.Draw(px, new Rectangle(0, 0, vw, vh), new Color(255, 244, 214) * a);
                         DrawMotes(sb, px, vw, vh, time, Math.Max(8, count / 6));
                     }
                     break;
