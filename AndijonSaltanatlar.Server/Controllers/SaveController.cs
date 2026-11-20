@@ -19,7 +19,11 @@ namespace AndijonSaltanatlar.Server.Controllers
     [RequestSizeLimit(MaxBytes)]
     public class SaveController : ControllerBase
     {
-        public const int MaxBytes = 8 * 1024 * 1024;
+        /// <summary>
+        /// Bitta saqlash so'rovining eng katta hajmi. Rivojlangan saltanat saqlanishi ~9 MB ga yetdi va 8 MB chegarada
+        /// serverga yuklanmay qolardi (413) — zaxira bilan 32 MB.
+        /// </summary>
+        public const int MaxBytes = 32 * 1024 * 1024;
         private readonly GameDbContext _db;
 
         public SaveController(GameDbContext db) { _db = db; }
