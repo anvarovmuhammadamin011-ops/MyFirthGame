@@ -110,6 +110,9 @@ namespace AndijonSaltanatlar.Military
         }
         public int TotalUpkeep => MilitaryEconomy.DailyUpkeep(Units);
 
+        /// <summary>Shahar rivojlanish bonusi (%): kuchli shahar qo'shinni kuchaytiradi. Har kuni yangilanadi (CityProgress).</summary>
+        public int DevelopmentBonusPercent { get; set; }
+
         public int TotalStrength
         {
             get
@@ -117,7 +120,7 @@ namespace AndijonSaltanatlar.Military
                 int s = 0;
                 foreach (MilitaryUnit u in Units) s += u.Strength;
                 foreach (Commander c in Commanders) s += c.LeadershipBonus;
-                return s;
+                return (int)(s * (1f + DevelopmentBonusPercent / 100f));
             }
         }
 

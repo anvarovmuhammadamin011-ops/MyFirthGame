@@ -126,6 +126,8 @@ public sealed class Game1 : Game
 	private readonly FarmWorkController _farmWork = new FarmWorkController();
 	/// <summary>Kasb egalari ish joylarida (hunarmand, konchi, baliqchi, savdogar, olim ...) va qo'shinxona mashg'uloti.</summary>
 	private readonly WorkplaceLifeController _workLife = new WorkplaceLifeController();
+	/// <summary>Quruvchilar qurilayotgan binolar oldida bolg'a uradi.</summary>
+	private readonly ConstructionLifeController _buildLife = new ConstructionLifeController();
 	private readonly SwimController _swim = new SwimController();
 
 	private bool _strategicMode;
@@ -2200,6 +2202,7 @@ public sealed class Game1 : Game
 		UpdateMilitaryRanks(dt);
 		_farmWork.Update(dt, _map, _buildings, _units, _state);
 		_workLife.Update(dt, _map, _buildings, _units, _state);
+		_buildLife.Update(dt, _map, _buildings, _units, _state);
 		_units.ApplyPhysics(_map, _combat.Possessed, dt);
 		_combat.UnrestHigh = _taxRiot != null && _taxRiot.Active;
 		_swim.Force = _opt.Swim;
@@ -2209,7 +2212,7 @@ public sealed class Game1 : Game
 			if (_swim.FirstInWater is Unit swimmer) _camera.Jump(IsoMath.TileToWorld(swimmer.Position) + new Vector2(0, 60), 2.6f);
 			_state.ShowMessage(_swim.Debug);
 		}
-		_swim.Update(dt, _map, _units, _state, _combat.Possessed, u => _farmWork.IsWorker(u) || _workLife.IsWorker(u));
+		_swim.Update(dt, _map, _units, _state, _combat.Possessed, u => _farmWork.IsWorker(u) || _workLife.IsWorker(u) || _buildLife.IsWorker(u));
 		// Uyga kirmagan paytda oilalar o'zlari non yopadi
 		if (!_state.Paused) AndijonSaltanatlar.Interiors.HouseInterior.TickOutside(dt * _state.Speed / Math.Max(1f, _state.Clock.SecondsPerDay) * 24f);
 		_renderer.Tick(dt);
@@ -2223,7 +2226,7 @@ public sealed class Game1 : Game
 			if (!_parade.CameraReleased && _combat.Possessed == null && _parade.Focus(out Vector2 pf))
 				_camera.Follow(IsoMath.TileToWorld(pf) + new Vector2(0f, -20f), num, 3f);
 		}
-		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_workLife?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
+		_curfew?.Update(dt, _map, _buildings, _units, _dayNight.NightAmount, _combat.Possessed, u => (_farmWork?.IsWorker(u) ?? false) || (_workLife?.IsWorker(u) ?? false) || (_buildLife?.IsWorker(u) ?? false) || (_swim?.IsSwimming(u) ?? false));
 		_citizenSocial.Update(_units, dt);
 		_citizenLife?.Update(dt, _map, _buildings, _units, _state, _combat.Possessed);
 		_taxRiot?.SetEscortShield(_combat.EscortCount);

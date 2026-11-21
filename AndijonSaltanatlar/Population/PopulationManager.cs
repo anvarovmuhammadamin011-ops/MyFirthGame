@@ -391,8 +391,12 @@ namespace AndijonSaltanatlar.Population
             int room = HousingCapacity - HousingUsed;
             if (AvgHappiness > 58f && res.Get(ResourceType.Food) > Count && room > 0)
             {
-                // Ehtiyojlari yaxshi qondirilgan shaharga ko'proq odam ko'chib keladi
-                int n = Math.Max(1, Math.Min(room, room / 4 + 1 + (NeedsAverage >= 65f ? 2 : 0)));
+                // Ehtiyojlari yaxshi qondirilgan shaharga ko'proq odam ko'chib keladi.
+                // Shahar qanchalik rivojlangan bo'lsa — oqim shuncha kuchli (CityProgress).
+                int cityLevel = AndijonSaltanatlar.Core.CityProgress.Level(Count, b);
+                float dev = AndijonSaltanatlar.Core.CityProgress.ImmigrationFactor(cityLevel);
+                int baseN = room / 4 + 1 + (NeedsAverage >= 65f ? 2 : 0);
+                int n = Math.Max(1, Math.Min(room, (int)Math.Round(baseN * dev)));
                 for (int i = 0; i < n; i++) AddImmigrant(b);
             }
             else if (AvgHappiness < 30f && Count > 6)

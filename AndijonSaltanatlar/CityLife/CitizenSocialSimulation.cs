@@ -187,12 +187,18 @@ namespace AndijonSaltanatlar.CityLife
                     }
                     unit.SetActivity(household.IsRevolting ? CitizenActivityIcon.Revolting : CitizenActivityIcon.Complaining);
                     unit.DriveIdle();
+                    // Arz-shikoyat: qo'l silkitib gapiradi (suhbat jestining o'zi, davomli)
+                    if (unit.LifeActionTime <= 0.12f)
+                        unit.PlayAction(Unit.ActionTalk, 0.9f + (float)_random.NextDouble() * 0.5f);
                     if (behavior.Destination != Vector2.Zero)
                         unit.SetFacing(behavior.Destination - unit.Position);
                     break;
                 case BehaviorMode.Talking:
                     behavior.Timer -= dt;
                     unit.DriveIdle();
+                    // Suhbat/savdo jesti: qo'l silkitib, yengil chayqalish — tugaganda o'zini yangilab, suhbat davomida takrorlanadi
+                    if (unit.LifeActionTime <= 0.12f)
+                        unit.PlayAction(Unit.ActionTalk, 1.0f + (float)_random.NextDouble() * 0.6f);
                     if (behavior.Partner != null)
                     {
                         unit.SetFacing(behavior.Partner.Position - unit.Position);

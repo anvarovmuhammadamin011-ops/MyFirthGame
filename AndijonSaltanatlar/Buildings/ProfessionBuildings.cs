@@ -57,6 +57,25 @@ namespace AndijonSaltanatlar.Buildings
         }
     }
 
+    /// <summary>Qurolxona — qurol-yarog' quyiladi va saqlanadi; qo'shin yollashni tezlashtiradi.
+    /// Hozircha Qo'shinxona (Barracks) ko'rinishidan foydalanadi — alohida 3D-render qo'shilsa, SpriteKey yangilanadi.</summary>
+    public sealed class Armory : Building
+    {
+        public const int BuildCost = 360;
+
+        public Armory(Point position) : base(position)
+        {
+            Type = BuildingType.Armory;
+            Name = "Qurolxona";
+            Description = "Temirchilar qilich, nayza va sovut quyadi; qo'shin shu yerdan qurollanadi. Yollash tezlashadi va shahar harbiy qudrati oshadi.";
+            Size = new Point(3, 3);
+            Category = BuildingCategory.Military;
+            Cost = BuildCost;
+            SetHitPoints(850);
+            SpriteKey = SpriteKeys.Barracks;
+        }
+    }
+
     /// <summary>Shifoxona (dorushshifo) — tabiblar aholini davolaydi.</summary>
     public sealed class Clinic : Building
     {

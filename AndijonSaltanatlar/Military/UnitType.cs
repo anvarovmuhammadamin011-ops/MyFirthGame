@@ -11,7 +11,9 @@ namespace AndijonSaltanatlar.Military
     {
         Piyoda, Qilichboz, Qalqonchi, Nayzador, Kamonchi, Otliq, SaroyQoriqchisi, ElitaOtliq, HarbiyXabarchi, TaminotBirligi,
         // --- kengaytma (faqat oxiriga) ---
-        OgirZirhli, Qoriqchi, HarbiyMuhandis, Razvedkachi, Mergan, Tufangchi
+        OgirZirhli, Qoriqchi, HarbiyMuhandis, Razvedkachi, Mergan, Tufangchi,
+        // --- kengaytma 2: shahar rivojlangani sari ochiladigan birliklar (faqat oxiriga) ---
+        Boltador, Zambarakchi
     }
 
     /// <summary>Jangdagi vazifasi (katalog kartasi va jang sahnasi uchun).</summary>
@@ -97,6 +99,14 @@ namespace AndijonSaltanatlar.Military
             new UnitDef { Type = UnitType.Tufangchi, NameUz = "Tufangchi", Role = UnitRole.Masofaviy, Health = 80, Attack = 34, Defense = 8, Speed = 4, TrainingCost = 420, TrainingDays = 5, Upkeep = 6,
                           Armor = 5, MinEra = 3, Equipment = "Pilta miltiq (tufang), porox xaltasi",
                           RequiredBuilding = BuildingType.Barracks, RequiredLevel = 3, Hint = "Bobur davri o'qotari (Panipat, 1526)", IconKey = "unit_musketeer" },
+
+            // ----- Kengaytma 2: shahar rivojlangani sari ochiladigan birliklar -----
+            new UnitDef { Type = UnitType.Boltador, NameUz = "Boltador", Role = UnitRole.Piyoda, Health = 110, Attack = 26, Defense = 9, Speed = 5, TrainingCost = 170, TrainingDays = 3, Upkeep = 3,
+                          Armor = 12, MinEra = 1, Equipment = "Ikki qo'llab urar jangovar bolta, charm sovut",
+                          RequiredBuilding = BuildingType.Barracks, RequiredLevel = 2, Hint = "Og'ir zarba: zirhni yorib o'tadi, mudofaasi past", IconKey = "unit_heavy" },
+            new UnitDef { Type = UnitType.Zambarakchi, NameUz = "Zambarakchi", Role = UnitRole.Masofaviy, Health = 75, Attack = 40, Defense = 6, Speed = 3, TrainingCost = 520, TrainingDays = 6, Upkeep = 7,
+                          Armor = 5, MinEra = 3, Equipment = "Yengil dala zambaragi, porox va o'q",
+                          RequiredBuilding = BuildingType.Barracks, RequiredLevel = 3, Hint = "Bobur dala to'pi (Panipat): uzoq va kuchli, lekin juda sekin", IconKey = "unit_musketeer" },
         };
 
         public static UnitDef Get(UnitType t)

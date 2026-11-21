@@ -27,6 +27,7 @@ namespace AndijonSaltanatlar.Buildings
             BuildingType.Mine => new[] { "Qazilma", "Kon", "Chuqur kon", "Katta kon", "Saltanat koni" },
             BuildingType.Fishery => new[] { "Baliqchi kulbasi", "Baliqxona", "Katta baliqxona", "Baliq bozori", "Saltanat baliqxonasi" },
             BuildingType.Clinic => new[] { "Tabibxona", "Shifoxona", "Dorushshifo", "Katta dorushshifo", "Saltanat dorushshifosi" },
+            BuildingType.Armory => new[] { "Temirchixona", "Qurolxona", "Katta qurolxona", "Zarbxona", "Saltanat qurolxonasi" },
             _ => new[] { "Oddiy", "Bezatilgan", "Boy", "Hashamatli", "Saltanat" },
         };
 
@@ -105,6 +106,7 @@ namespace AndijonSaltanatlar.Buildings
             BuildingType.Mine => "konchilar soni va ma'dan hajmi",
             BuildingType.Fishery => "baliqchilar soni va ovi",
             BuildingType.Clinic => "tabiblar soni va aholi sog'lig'i",
+            BuildingType.Armory => "yollash tezligi va shahar harbiy qudrati",
             _ => "mustahkamlik va sig'im",
         };
     }

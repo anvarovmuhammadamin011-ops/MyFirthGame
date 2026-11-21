@@ -50,6 +50,10 @@ public sealed class GameStateManager
 	public WorldSimulation World { get; } = new WorldSimulation();
 
 	public ArmyManager Military { get; } = new ArmyManager();
+	/// <summary>Oxirgi hisoblangan shahar rivojlanish darajasi (yuksalish xabari uchun). -1 = hali hisoblanmagan.</summary>
+	private int _lastCityLevel = -1;
+	/// <summary>Shahar rivojlanish darajasi (0..8): aholi va binolardan. 0 — hali hisoblanmagan.</summary>
+	public int CityLevel { get; private set; }
 
 	public CivilizationManager Civ { get; } = new CivilizationManager();
 
@@ -465,6 +469,17 @@ public sealed class GameStateManager
 		int hour = Clock.Hour;
 		Clock.Update(num);
 		// Jangchilar har o'yin SOATida tayyorlanadi (kun uzun — 60 daqiqa; TrainingDays = soat)
+		// Shahar rivojlanish darajasi: aholi + binolardan. Qo'shin kuchi (jonli bonus) va yuksalish xabari shundan.
+		CityLevel = CityProgress.Level(Pop.Count, buildings);
+		int armoryLevels = 0;
+		foreach (Building ab in buildings.Buildings)
+			if (ab.Type == BuildingType.Armory && ab.BuildProgress >= 1f) armoryLevels += ab.Level;
+		// Qurolxona: har darajasi qo'shin kuchiga qo'shimcha +4%
+		Military.DevelopmentBonusPercent = CityProgress.MilitaryBonusPercent(CityLevel) + armoryLevels * 4;
+		if (Pop.Initialized && _lastCityLevel >= 0 && CityLevel > _lastCityLevel)
+			ShowMessage("Shahar yuksaldi! Rivojlanish darajasi: " + CityLevel + " — qo'shin kuchi va aholi oqimi oshdi.");
+		_lastCityLevel = CityLevel;
+
 		if (Clock.Hour != hour || Clock.Day != day) Military.DailyTick();
 		float buildSpeed = ConstructionSpeed(Pop.CountProfession(CitizenProfession.Quruvchi), Pop.CountProfession(CitizenProfession.Memor));
 		foreach (Building building in buildings.Buildings)
@@ -522,7 +537,7 @@ public sealed class GameStateManager
 			Pop.MonthlyGrowth(buildings, _resources);
 		}
 		Population = Pop.Count;
-		Military.MaxConcurrent = Math.Max(2, buildings.Count(BuildingType.Barracks) * 2);
+		Military.MaxConcurrent = Math.Max(2, buildings.Count(BuildingType.Barracks) * 2 + buildings.Count(BuildingType.Armory));
 		// Havo hissi (qish sovug'i, yoz issig'i) aholining kayfiyatiga ta'sir qiladi
 		Pop.AdjustHappiness(SeasonVisuals.HappinessDelta(SeasonVisuals.ComfortOf(Season, Weather.Current, 0.5f)) + Weather.MoodModifier() * 6f);
 		int num3 = buildings.Count(BuildingType.Barracks) * 6;

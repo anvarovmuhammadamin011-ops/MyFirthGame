@@ -21,6 +21,7 @@ namespace AndijonSaltanatlar.Military
         /// <summary>Masofaviy jangchining o'q yetadigan masofasi (tile).</summary>
         public static float ReachOf(UnitType t) => t switch
         {
+            UnitType.Zambarakchi => 7.5f,   // dala to'pi: eng uzoq
             UnitType.Tufangchi => 6.5f,
             UnitType.Mergan => 5.5f,
             UnitType.Razvedkachi => 4f,
@@ -37,7 +38,7 @@ namespace AndijonSaltanatlar.Military
                 UnitType.Otliq or UnitType.ElitaOtliq or UnitType.Razvedkachi => new CavalryUnit(here),
                 UnitType.Nayzador or UnitType.SaroyQoriqchisi or UnitType.Qoriqchi => new SpearmanUnit(pos, facing),
                 UnitType.Qalqonchi or UnitType.OgirZirhli => new GuardUnit(pos, facing),
-                UnitType.Qilichboz => new SwordsmanUnit(here),
+                UnitType.Qilichboz or UnitType.Boltador => new SwordsmanUnit(here),
                 _ => new PatrolUnit(here),
             };
             u.SetLook(d.IconKey);
@@ -70,7 +71,9 @@ namespace AndijonSaltanatlar.Military
         {
             float f = dmg;
             if (attacker is SpearmanUnit && victim is CavalryUnit) f *= 1.5f;
-            if (victim.Armor > 0) f *= (100 - System.Math.Clamp(victim.Armor, 0, 60)) / 100f;
+            int armor = System.Math.Clamp(victim.Armor, 0, 60);
+            if (attacker.LineType == UnitType.Boltador) armor /= 2;   // jangovar bolta zirhning yarmini yorib o'tadi
+            if (armor > 0) f *= (100 - armor) / 100f;
             return System.Math.Max(1, (int)System.MathF.Round(f));
         }
     }

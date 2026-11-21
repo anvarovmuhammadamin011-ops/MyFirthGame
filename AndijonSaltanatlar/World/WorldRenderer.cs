@@ -54,7 +54,12 @@ namespace AndijonSaltanatlar.World
             _buffer.Clear();
             foreach (var b in buildings.Buildings) if (Visible(b, view)) _buffer.Add(b);
             foreach (var d in map.Decorations) if (Visible(d, view)) _buffer.Add(d);
-            foreach (var u in units.Units) if (!u.Hidden && Visible(u, view)) _buffer.Add(u);
+            foreach (var u in units.Units)
+            {
+                // Ko'rinish holatini belgilash: throttling faqat ishonchli ekrandan tashqaridagi odamlarga (ko'rinadigani — 0)
+                if (!u.Hidden && Visible(u, view)) { u.OffscreenFrames = 0; _buffer.Add(u); }
+                else if (u.OffscreenFrames < 1_000_000) u.OffscreenFrames++;
+            }
             if (extra != null) foreach (var e in extra) if (Visible(e, view)) _buffer.Add(e);
             _buffer.Sort(Compare);
             bool farView = view.Z - view.X > 1700f;   // kamera uzoqda: mayda yozuv va nishonlar chizilmaydi (LOD)

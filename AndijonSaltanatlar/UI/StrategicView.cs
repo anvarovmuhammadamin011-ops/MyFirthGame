@@ -51,6 +51,8 @@ namespace AndijonSaltanatlar.UI
         public const float MarchTime = 2.8f;
         private int _marchFrom = -1, _marchTarget = -1;
         private readonly System.Diagnostics.Stopwatch _marchClock = new System.Diagnostics.Stopwatch();
+        /// <summary>Xarita animatsiyalari uchun doimiy soat (karvon harakati).</summary>
+        private readonly System.Diagnostics.Stopwatch _animClock = System.Diagnostics.Stopwatch.StartNew();
         /// <summary>Qo'shin nishonga yetdi — Game1 jang sahnasini ochadi (keyin -1 ga qaytaradi).</summary>
         public int MarchArrivedRegion { get; set; } = -1;
         public bool Marching => _marchTarget >= 0;
@@ -269,15 +271,29 @@ namespace AndijonSaltanatlar.UI
                 }
         }
 
+        private static readonly Color Caravan = new Color(222, 180, 120);
+
         private void DrawTradeRoutes(SpriteBatch sb)
         {
+            float time = (float)_animClock.Elapsed.TotalSeconds;
             foreach (TradeAgreement a in W.Trade.Agreements)
             {
                 if (a.Status != TradeStatus.Active) continue;
                 Kingdom s = W.Kingdoms.Get(a.SellerKingdomId), b = W.Kingdoms.Get(a.BuyerKingdomId);
                 if (s == null || b == null) continue;
-                if (_node.TryGetValue(s.CapitalRegionId, out var p1) && _node.TryGetValue(b.CapitalRegionId, out var p2))
-                    DrawLine(sb, p1, p2, Gold, 2);
+                if (!_node.TryGetValue(s.CapitalRegionId, out var p1) || !_node.TryGetValue(b.CapitalRegionId, out var p2)) continue;
+                DrawLine(sb, p1, p2, Gold, 2);
+
+                // Harakatlanuvchi karvon: sotuvchidan xaridorga mol tashiydi, yo'l bo'ylab takrorlanadi (shaharlararo savdo jonli ko'rinsin)
+                float dist = Vector2.Distance(p1, p2);
+                if (dist < 6f) continue;
+                Vector2 dir = (p2 - p1) / dist;
+                float period = MathF.Max(3.5f, dist / 34f);           // uzoqroq yo'l — karvon sekinroq o'tadi
+                float frac = ((time + a.Id * 1.37f) % period) / period;
+                Vector2 at = Vector2.Lerp(p1, p2, frac);
+                at.Y += MathF.Sin(frac * MathF.PI * 6f) * 1.2f;        // yengil tebranish (tuya qadami)
+                DrawDisc(sb, at, 3.2f, Caravan);                       // tuya
+                DrawDisc(sb, at - dir * 4.2f, 2.4f, Canvas.Shade(Caravan, 0.8f)); // ortidagi yuk
             }
         }
 

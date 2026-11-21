@@ -8,7 +8,9 @@ namespace AndijonSaltanatlar.Buildings
     {
         House, Market, Tower, Wall, Gate, MainHall, Garden, Barracks, Madrasa, Mosque, Caravanserai, Farm, GladiatorArena,
         // --- kengaytma (saqlashda butun son — faqat oxiriga) ---
-        Workshop, Mine, Fishery, Clinic
+        Workshop, Mine, Fishery, Clinic,
+        // --- kengaytma 2 (faqat oxiriga) ---
+        Armory
     }
 
     public enum BuildingCategory

@@ -31,6 +31,7 @@ namespace AndijonSaltanatlar.Buildings
                 case BuildingType.Mine: b = new Mine(position); break;
                 case BuildingType.Fishery: b = new Fishery(position); break;
                 case BuildingType.Clinic: b = new Clinic(position); break;
+                case BuildingType.Armory: b = new Armory(position); break;
                 default: throw new ArgumentOutOfRangeException(nameof(type));
             }
             b.Variant = variant;

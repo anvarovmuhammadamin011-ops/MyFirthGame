@@ -67,8 +67,17 @@ namespace AndijonSaltanatlar.Units
         /// <summary>Ish harakati vaqti (soniya) — poza ritmi uchun.</summary>
         public float WorkTime { get; set; }
 
-        // --- Hayot pozalari (ish, bayram, buyruq, mag'lubiyat) ---
-        public const int ActionNone = 0, ActionCelebrate = 1, ActionSalute = 2, ActionDefeat = 3;
+        // --- Hayot pozalari (ish, bayram, buyruq, mag'lubiyat, suhbat) ---
+        public const int ActionNone = 0, ActionCelebrate = 1, ActionSalute = 2, ActionDefeat = 3, ActionTalk = 4;
+        /// <summary>Tinch turganda nafas olish ritmi uchun doim o'suvchi vaqt (soniya).</summary>
+        private float _breathTime;
+
+        /// <summary>Ketma-ket necha kadr ekrandan tashqarida (renderer har kadr yangilaydi). &gt;1 — throttling mumkin.</summary>
+        public int OffscreenFrames;
+        /// <summary>Throttling paytida to'plangan vaqt (keyingi yangilanishda to'liq beriladi).</summary>
+        public float ThrottleAccum;
+        /// <summary>Yumshoq kirish/chiqish egri chizig'i (0..1): keskinlikni yo'qotadi.</summary>
+        private static float Smooth01(float x) { x = x < 0f ? 0f : (x > 1f ? 1f : x); return x * x * (3f - 2f * x); }
         /// <summary>Hozirgi hayot harakati (ActionCelebrate/Salute/Defeat) va qolgan vaqti.</summary>
         public int LifeAction { get; private set; }
         public float LifeActionTime { get; private set; }
@@ -100,7 +109,13 @@ namespace AndijonSaltanatlar.Units
             float side = Flipped ? -1f : 1f;
             if (LifeAction != ActionNone && LifeActionTime > 0f)
             {
-                float u = 1f - LifeActionTime / _lifeActionTotal;   // 0..1
+                float total = MathF.Max(0.1f, _lifeActionTotal);
+                float elapsed = total - LifeActionTime;
+                float u = elapsed / total;   // 0..1
+                // Yumshoq kirish/chiqish: poza birdan paydo bo'lmaydi va birdan uzilmaydi (keskin holat almashmasin)
+                float inT = MathF.Min(0.18f, total * 0.4f);
+                float outT = MathF.Min(0.22f, total * 0.4f);
+                float env = Smooth01(elapsed / MathF.Max(0.01f, inT)) * Smooth01(LifeActionTime / MathF.Max(0.01f, outT));
                 switch (LifeAction)
                 {
                     case ActionCelebrate:   // sakrab-sakrab xursandchilik
@@ -119,7 +134,15 @@ namespace AndijonSaltanatlar.Units
                         scaleY = 0.88f;
                         offset = new Vector2(0, 2.5f);
                         break;
+                    case ActionTalk:        // suhbatlashish: qo'l silkitib, yengil chayqalish
+                        rotation = 0.04f * MathF.Sin(u * _lifeActionTotal * 5.5f) * side;
+                        offset = new Vector2(MathF.Sin(u * _lifeActionTotal * 5.5f + 1.3f) * 0.8f, 0);
+                        break;
                 }
+                // Envelope: siljish va og'ishni yumshat, vertikal masshtabni 1 dan asta uzoqlashtir
+                offset *= env;
+                rotation *= env;
+                scaleY = 1f + (scaleY - 1f) * env;
                 offset = new Vector2(MathF.Round(offset.X), MathF.Round(offset.Y));
                 return;
             }
@@ -128,7 +151,17 @@ namespace AndijonSaltanatlar.Units
                 rotation = 0.07f * side;   // yugurishda oldinga engashadi
                 return;
             }
-            if (WorkStyle == 0 || IsStepping) return;
+            if (IsStepping) return;        // yurishdagi ko'tarilish renderer'da — bu yerda qo'shimcha poza yo'q
+            if (WorkStyle == 0)
+            {
+                // Tinch turganda nafas olish: bilinar-bilinmas ko'krak kengayishi va yengil ko'tarilish.
+                // Baked ish kadrlari aylanayotgan bo'lsa (dehqon ketmon chopyapti) — tegmaymiz.
+                if (Working) return;
+                float br = _breathTime * 1.6f + PerEntityPhaseOffset;
+                scaleY = 1f + 0.012f * MathF.Sin(br);
+                offset = new Vector2(0, MathF.Round(-0.4f * (0.5f + 0.5f * MathF.Sin(br))));
+                return;
+            }
             float t = WorkTime + PerEntityPhaseOffset;
             switch (WorkStyle)
             {
@@ -565,6 +598,7 @@ namespace AndijonSaltanatlar.Units
             if (HitReactTimer > 0f) HitReactTimer = MathF.Max(0f, HitReactTimer - dt);
             if (IsDown) DownTime += dt; else { DownTime = 0f; FadeAlpha = 1f; }
             if (WorkStyle != 0) WorkTime += dt;
+            _breathTime += dt;
             if (LifeActionTime > 0f) { LifeActionTime = MathF.Max(0f, LifeActionTime - dt); if (LifeActionTime <= 0f) LifeAction = ActionNone; }
 
             // 1) Xatti-harakatni yangilash (suhbatda — joyida turadi; yiqilgan — qimirlamaydi;

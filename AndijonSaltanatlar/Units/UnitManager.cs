@@ -105,9 +105,33 @@ namespace AndijonSaltanatlar.Units
         /// <summary>Unitni dunyodan olib tashlaydi (faqat vaqtinchalik unitlar — masalan bosqinchilar — uchun).</summary>
         public bool Remove(Unit unit) => Units.Remove(unit);
 
+        private int _parity;
+
         public void Update(float dt)
         {
-            foreach (var u in Units) u.Update(dt);
+            _parity ^= 1;
+            foreach (var u in Units)
+            {
+                // Ekrandan tashqaridagi oddiy odamlar har ikki kadrda bir marta yangilanadi (to'plangan vaqt bilan),
+                // ko'rinadigan va jang/boshqariluvchi odamlar — har kadr (silliq). Yuk Id bo'yicha ikki kadrga taqsimlanadi.
+                bool canThrottle = u.OffscreenFrames > 1 && !u.ExternallyControlled && u.AttackTimer <= 0f && u.HurtTimer <= 0f;
+                if (canThrottle)
+                {
+                    u.ThrottleAccum += dt;
+                    if (((u.Id & 1) ^ _parity) != 0) continue;   // bu kadr navbati emas — faqat to'playdi
+                    u.Update(u.ThrottleAccum);
+                    u.ThrottleAccum = 0f;
+                }
+                else if (u.ThrottleAccum > 0f)
+                {
+                    u.Update(dt + u.ThrottleAccum);              // throttlingdan chiqdi — qolgan vaqtni ham beradi
+                    u.ThrottleAccum = 0f;
+                }
+                else
+                {
+                    u.Update(dt);
+                }
+            }
         }
 
         private readonly Dictionary<Unit, Vector2> _lastValid = new Dictionary<Unit, Vector2>();
